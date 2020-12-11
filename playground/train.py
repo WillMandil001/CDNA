@@ -62,6 +62,9 @@ def concat_examples(batch):
     # Split the actions, states and images into timestep
     act_training_set = np.split(ary=act_training_set, indices_or_sections=act_training_set.shape[1], axis=1)
     act_training_set = [np.squeeze(act, axis=1) for act in act_training_set]
+    print(act_training_set)
+    print("here")
+    print(sta_training_set)
     sta_training_set = np.split(ary=sta_training_set, indices_or_sections=sta_training_set.shape[1], axis=1)
     sta_training_set = [np.squeeze(sta, axis=1) for sta in sta_training_set]
     img_training_set = np.split(ary=img_training_set, indices_or_sections=img_training_set.shape[1], axis=1)
@@ -634,9 +637,14 @@ class Model(chainer.Chain):
 
 
 class ModelTrainer():
-    def __init__(self, learning_rate, gpu):
-        self.learning_rate = learning_rate
+    def __init__(self, learning_rate, gpu, num_iterations, schedsamp_k, use_state, context_frames, num_masks):
         self.gpu = gpu
+        self.num_masks = num_masks 
+        self.use_state = use_state
+        self.schedsamp_k = schedsamp_k
+        self.learning_rate = learning_rate
+        self.context_frames = context_frames 
+        self.num_iterations = num_iterations
 
     def create_model(self):
         # create the model 
@@ -652,14 +660,14 @@ class ModelTrainer():
         if self.gpu > -1:
             chainer.cuda.get_device_from_id(self.gpu).use()
             self.training_model.to_gpu()
-            xp = cupy
+            self.xp = cupy
         else:
-            xp = np
+            self.xp = np
 
     def create_opimiser(self):
         # Create the optimizers for the models
-        optimizer = chainer.optimizers.Adam(alpha=self.learning_rate)
-        optimizer.setup(self.training_model) 
+        self.optimizer = chainer.optimizers.Adam(alpha=self.learning_rate)
+        self.optimizer.setup(self.training_model) 
 
     def load_data_from_git(self):
         ''' Save the current GIT commit corresponding to the current training.
@@ -678,6 +686,60 @@ class ModelTrainer():
         except:
             pass
 
+    def train(self, train_iter, valid_iter, logger, images_training, actions_training, states_training, images_validation, actions_validation, states_validation, grouped_set_training, grouped_set_validation):
+        # Run training
+        # As per Finn's implementation, one epoch is run on one batch size, randomly, but never more than once.
+        # At the end of the queue, if the epochs len is not reach, the queue is generated again. 
+        local_losses = []
+        local_psnr_all = []
+        local_losses_valid = []
+        local_psnr_all_valid = []
+
+        global_losses = []
+        global_psnr_all = []
+        global_losses_valid = []
+        global_psnr_all_valid = []
+
+        summaries, summaries_valid = [], []
+        training_queue = []
+        validation_queue = []
+        #for epoch in xrange(epochs):
+        start_time = None
+        stop_time = None
+        itr = 0
+
+        while itr < self.num_iterations:
+            epoch = train_iter.epoch
+            batch = train_iter.next()
+            #x = concat_examples(batch)
+            img_training_set, act_training_set, sta_training_set = concat_examples(batch)
+
+            # Perform training
+            logger.info("Begining training for mini-batch {0}/{1} of epoch {2}".format(str(train_iter.current_position), str(len(images_training)), str(epoch+1)))
+            logger.info("Global iteration: {}".format(str(itr+1)))
+            loss = self.training_model(img_training_set, act_training_set,)
+            if start_time is None:
+                start_time = time.time()
+
+            self.optimizer.update(self.training_model, [self.xp.array(img_training_set), self.xp.array(act_training_set), self.xp.array(sta_training_set)], itr)
+            loss = self.training_model.loss
+            psnr_all = self.training_model.psnr_all
+            summaries = self.training_model.summaries
+
+            loss_data_cpu = chainer.cuda.to_cpu(loss.data)
+            psnr_data_cpu = chainer.cuda.to_cpu(psnr_all.data)
+
+            local_losses.append(loss_data_cpu)
+            local_psnr_all.append(psnr_data_cpu)
+            self.training_model.reset_state()
+
+            logger.info("{0} {1}".format(str(epoch+1), str(loss.data)))
+            loss, psnr_all, loss_data_cpu, psnr_data_cpu = None, None, None, None
+            
+
+
+            itr += 1
+
     def train_single_epoch(self):
         pass
 
@@ -686,7 +748,7 @@ class ModelTrainer():
 
 
 class DataGenerator():
-    def __init__(self, batch_size, logger, data_dir):
+    def __init__(self, batch_size, logger, data_dir, train_val_split):
         data_map = []
         with open(data_dir + '/map.csv', 'rb') as f:
             reader = csv.reader(f)
@@ -696,7 +758,7 @@ class DataGenerator():
         if len(data_map) <= 1: # empty or only header
             logger.error("No file map found")
             exit()
-            
+          
         # Load the images, actions and states
         images = []
         actions = []
@@ -712,15 +774,41 @@ class DataGenerator():
         states = np.asarray(states, dtype=np.float32)
 
         train_val_split_index = int(np.floor(train_val_split * len(images)))
-        images_training = np.asarray(images[:train_val_split_index])
-        actions_training = np.asarray(actions[:train_val_split_index])
-        states_training = np.asarray(states[:train_val_split_index])
+        self.images_training = np.asarray(images[:train_val_split_index])
+        self.actions_training = np.asarray(actions[:train_val_split_index])
+        self.states_training = np.asarray(states[:train_val_split_index])
 
-        images_validation = np.asarray(images[train_val_split_index:])
-        actions_validation = np.asarray(actions[train_val_split_index:])
-        states_validation = np.asarray(states[train_val_split_index:])
+        self.images_validation = np.asarray(images[train_val_split_index:])
+        self.actions_validation = np.asarray(actions[train_val_split_index:])
+        self.states_validation = np.asarray(states[train_val_split_index:])
 
         logger.info('Data set contain {0}, {1} will be use for training and {2} will be use for validation'.format(len(images)-1, train_val_split_index, len(images)-1-train_val_split_index))
+
+        # Group the images, actions and states
+        self.grouped_set_training = []
+        self.grouped_set_validation = []
+        for idx in xrange(len(self.images_training)):
+            group = []
+            group.append(self.images_training[idx])
+            group.append(self.actions_training[idx])
+            group.append(self.states_training[idx])
+            self.grouped_set_training.append(group)
+        for idx in xrange(len(self.images_validation)):
+            group = []
+            group.append(self.images_validation[idx])
+            group.append(self.actions_validation[idx])
+            group.append(self.states_validation[idx])
+            self.grouped_set_validation.append(group)
+
+    def return_Data(self):
+        return [self.images_training, self.actions_training, self.states_training, self.images_validation, self.actions_validation, self.states_validation,
+        self.grouped_set_training, self.grouped_set_validation]
+
+    def train_iter(self, batch_size):
+        #train_iter = chainer.iterators.SerialIterator(grouped_set_training, batch_size)
+        train_iter = chainer.iterators.SerialIterator(self.grouped_set_training, batch_size, repeat=True, shuffle=True)
+        valid_iter = chainer.iterators.SerialIterator(self.grouped_set_validation, batch_size, repeat=False, shuffle=True)
+        return train_iter, valid_iter
 
 
 # =================================================
@@ -731,8 +819,14 @@ class DataGenerator():
 @click.option('--gpu', type=click.INT, default=-1, help='ID of the gpu(s) to use')
 @click.option('--batch_size', type=click.INT, default=32, help='Batch size for training.')
 @click.option('--num_iterations', type=click.INT, default=100000, help='Number of training iterations. Number of epoch is: num_iterations/batch_size.')
-@click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/Data_sets/data_set_001', help='Directory containing data.')
-def main(learning_rate, gpu, batch_size, num_iterations, data_dir):
+@click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/Data_sets/CDNA_data/processed', help='Directory containing data.')
+@click.option('--train_val_split', type=click.FLOAT, default=0.95, help='The percentage of data to use for the training set, vs. the validation set.')
+@click.option('--schedsamp_k', type=click.FLOAT, default=900.0, help='The k parameter for schedules sampling. -1 for no scheduled sampling.')
+@click.option('--use_state', type=click.INT, default=1, help='Whether or not to give the state+action to the model.')
+@click.option('--context_frames', type=click.INT, default=2, help='Number of frames before predictions.')
+@click.option('--num_masks', type=click.INT, default=10, help='Number of masks, usually 1 for DNA, 10 for CDNA, STP.')
+
+def main(learning_rate, gpu, batch_size, num_iterations, data_dir, train_val_split, schedsamp_k, use_state, context_frames, num_masks):
     logger = logging.getLogger(__name__)
     logger.info('Training the model')
     logger.info('Model: {}'.format("CDNA"))
@@ -742,14 +836,19 @@ def main(learning_rate, gpu, batch_size, num_iterations, data_dir):
     logger.info('# epoch: {}'.format(round(num_iterations/batch_size)))
 
     ### Initialise the model
-    model_trainer = ModelTrainer(learning_rate, gpu)    # Generate model trainer.
+    model_trainer = ModelTrainer(learning_rate, gpu, num_iterations, schedsamp_k, use_state, context_frames, num_masks)    # Generate model trainer.
     model_trainer.create_model()                        # Create the model.
     model_trainer.create_opimiser()                     # Create the optimizers for the models.
     model_trainer.gpu_support()                         # Enable GPU if required.
 
     ### Generate the training data
     logger.info("Fetching the models and inputs")
-    data_generator = DataGenerator(batch_size, logger, data_dir) 
+    data_generator = DataGenerator(batch_size, logger, data_dir, train_val_split) 
+    train_iter, valid_iter = data_generator.train_iter(batch_size)
+    data = data_generator.return_Data()
+    ### Train model:
+    model_trainer.train(train_iter, valid_iter, logger, 
+                        data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7])
 
 
 if __name__ == '__main__':

@@ -110,7 +110,7 @@ class DataFormatter():
             np.save(self.out_dir + '/action_batch_' + str(j), self.robot_positions[j][1:])
 
             ### save np states
-            np.save(self.out_dir + '/state_batch_' + str(j), self.robot_positions[j][0])
+            np.save(self.out_dir + '/state_batch_' + str(j), self.robot_positions[j][0:-2])
 
             # save names for map file
             ref.append('image_batch_' + str(j) + '.npy')
@@ -152,7 +152,7 @@ class DataFormatter():
 
 @click.command()
 @click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/Data_sets/data_set_003/', help='Directory containing data.')
-@click.option('--out_dir', type=click.Path(), default='/home/user/Robotics/CDNA/dataset/processed', help='Output directory of the converted data.')
+@click.option('--out_dir', type=click.Path(), default='/home/user/Robotics/Data_sets/CDNA_data/processed', help='Output directory of the converted data.')
 @click.option('--sequence_length', type=click.INT, default=10, help='Sequence length, including context frames.')
 @click.option('--image_original_width', type=click.INT, default=640, help='Original width of the images.')
 @click.option('--image_original_height', type=click.INT, default=512, help='Original height of the images.')

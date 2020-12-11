@@ -856,111 +856,111 @@ def main(output_dir, event_log_dir, num_iterations, pretrained_model, pretrained
     )
     training_model.Summary()
 
-    # # Create the optimizers for the models
-    # optimizer = chainer.optimizers.Adam(alpha=learning_rate)
-    # optimizer.setup(training_model) 
+    # Create the optimizers for the models
+    optimizer = chainer.optimizers.Adam(alpha=learning_rate)
+    optimizer.setup(training_model) 
 
-    # # Load a previous model
-    # if pretrained_model:
-    #     chainer.serializers.load_npz(pretrained_model, training_model)
-    #     logger.info("Loading pretrained model {}".format(pretrained_model))
-    # if pretrained_state:
-    #     chainer.serializers.load_npz(pretrained_state, training_model)
-    #     logger.info("Loading pretrained state {}".format(pretrained_state))
+    # Load a previous model
+    if pretrained_model:
+        chainer.serializers.load_npz(pretrained_model, training_model)
+        logger.info("Loading pretrained model {}".format(pretrained_model))
+    if pretrained_state:
+        chainer.serializers.load_npz(pretrained_state, training_model)
+        logger.info("Loading pretrained state {}".format(pretrained_state))
 
-    # # Save the current GIT commit corresponding to the current training.
-    # # When predicting or visualizing the model, change the working directory to the GIT snapshot
-    # # This way, instead of copying the files into the model folder, we use GIT functionality to preserve the training files
-    # current_version = None
-    # try:
-    #     subprocess.check_call(['git', 'status'])
-    #     def git_exec(args):
-    #         process = subprocess.Popen(['git'] + args, stdout=subprocess.PIPE)
-    #         res = process.communicate()[0].rstrip().strip()
-    #         #process.wait()
-    #         return res
+    # Save the current GIT commit corresponding to the current training.
+    # When predicting or visualizing the model, change the working directory to the GIT snapshot
+    # This way, instead of copying the files into the model folder, we use GIT functionality to preserve the training files
+    '''current_version = None
+    try:
+        subprocess.check_call(['git', 'status'])
+        def git_exec(args):
+            process = subprocess.Popen(['git'] + args, stdout=subprocess.PIPE)
+            res = process.communicate()[0].rstrip().strip()
+            #process.wait()
+            return res
 
-    #     current_version = git_exec(['rev-parse', '--abbrev-ref', 'HEAD']) + '\n' + git_exec(['rev-parse', 'HEAD'])
-    # except:
-    #     pass
+        current_version = git_exec(['rev-parse', '--abbrev-ref', 'HEAD']) + '\n' + git_exec(['rev-parse', 'HEAD'])
+    except:
+        pass '''
 
-    # # Training
-    # # Enable GPU support if defined
-    # if gpu > -1:
-    #     chainer.cuda.get_device_from_id(gpu).use()
-    #     training_model.to_gpu()
-    #     xp = cupy
-    # else:
-    #     xp = np
+    # Training
+    # Enable GPU support if defined
+    if gpu > -1:
+        chainer.cuda.get_device_from_id(gpu).use()
+        training_model.to_gpu()
+        xp = cupy
+    else:
+        xp = np
 
-    # # Create the batches for Chainer's implementation of the iterator
-    # # Group the images, actions and states
-    # grouped_set_training = []
-    # grouped_set_validation = []
-    # for idx in xrange(len(images_training)):
-    #     group = []
-    #     group.append(images_training[idx])
-    #     group.append(actions_training[idx])
-    #     group.append(states_training[idx])
-    #     grouped_set_training.append(group)
-    # for idx in xrange(len(images_validation)):
-    #     group = []
-    #     group.append(images_validation[idx])
-    #     group.append(actions_validation[idx])
-    #     group.append(states_validation[idx])
-    #     grouped_set_validation.append(group)
+    # Create the batches for Chainer's implementation of the iterator
+    # Group the images, actions and states
+    grouped_set_training = []
+    grouped_set_validation = []
+    for idx in xrange(len(images_training)):
+        group = []
+        group.append(images_training[idx])
+        group.append(actions_training[idx])
+        group.append(states_training[idx])
+        grouped_set_training.append(group)
+    for idx in xrange(len(images_validation)):
+        group = []
+        group.append(images_validation[idx])
+        group.append(actions_validation[idx])
+        group.append(states_validation[idx])
+        grouped_set_validation.append(group)
 
-    # #train_iter = chainer.iterators.SerialIterator(grouped_set_training, batch_size)
-    # train_iter = chainer.iterators.SerialIterator(grouped_set_training, batch_size, repeat=True, shuffle=True)
-    # valid_iter = chainer.iterators.SerialIterator(grouped_set_validation, batch_size, repeat=False, shuffle=True)
+    #train_iter = chainer.iterators.SerialIterator(grouped_set_training, batch_size)
+    train_iter = chainer.iterators.SerialIterator(grouped_set_training, batch_size, repeat=True, shuffle=True)
+    valid_iter = chainer.iterators.SerialIterator(grouped_set_validation, batch_size, repeat=False, shuffle=True)
 
-    # # Run training
-    # # As per Finn's implementation, one epoch is run on one batch size, randomly, but never more than once.
-    # # At the end of the queue, if the epochs len is not reach, the queue is generated again. 
-    # local_losses = []
-    # local_psnr_all = []
-    # local_losses_valid = []
-    # local_psnr_all_valid = []
+    # Run training
+    # As per Finn's implementation, one epoch is run on one batch size, randomly, but never more than once.
+    # At the end of the queue, if the epochs len is not reach, the queue is generated again. 
+    local_losses = []
+    local_psnr_all = []
+    local_losses_valid = []
+    local_psnr_all_valid = []
 
-    # global_losses = []
-    # global_psnr_all = []
-    # global_losses_valid = []
-    # global_psnr_all_valid = []
+    global_losses = []
+    global_psnr_all = []
+    global_losses_valid = []
+    global_psnr_all_valid = []
 
-    # summaries, summaries_valid = [], []
-    # training_queue = []
-    # validation_queue = []
-    # #for epoch in xrange(epochs):
-    # start_time = None
-    # stop_time = None
-    # itr = 0
-    # while itr < num_iterations:
-    #     epoch = train_iter.epoch
-    #     batch = train_iter.next()
-    #     #x = concat_examples(batch)
-    #     img_training_set, act_training_set, sta_training_set = concat_examples(batch)
+    summaries, summaries_valid = [], []
+    training_queue = []
+    validation_queue = []
+    #for epoch in xrange(epochs):
+    start_time = None
+    stop_time = None
+    itr = 0
+    while itr < num_iterations:
+        epoch = train_iter.epoch
+        batch = train_iter.next()
+        #x = concat_examples(batch)
+        img_training_set, act_training_set, sta_training_set = concat_examples(batch)
 
-    #     # Perform training
-    #     logger.info("Begining training for mini-batch {0}/{1} of epoch {2}".format(str(train_iter.current_position), str(len(images_training)), str(epoch+1)))
-    #     logger.info("Global iteration: {}".format(str(itr+1)))
-    #     #loss = training_model(img_training_set, act_training_set, sta_training_set, epoch, schedsamp_k, use_state, num_masks, context_frames)
-    #     if start_time is None:
-    #         start_time = time.time()
+        # Perform training
+        logger.info("Begining training for mini-batch {0}/{1} of epoch {2}".format(str(train_iter.current_position), str(len(images_training)), str(epoch+1)))
+        logger.info("Global iteration: {}".format(str(itr+1)))
+        #loss = training_model(img_training_set, act_training_set, sta_training_set, epoch, schedsamp_k, use_state, num_masks, context_frames)
+        if start_time is None:
+            start_time = time.time()
 
-    #     optimizer.update(training_model, [xp.array(img_training_set), xp.array(act_training_set), xp.array(sta_training_set)], itr)
-    #     loss = training_model.loss
-    #     psnr_all = training_model.psnr_all
-    #     summaries = training_model.summaries
+        optimizer.update(training_model, [xp.array(img_training_set), xp.array(act_training_set), xp.array(sta_training_set)], itr)
+        loss = training_model.loss
+        psnr_all = training_model.psnr_all
+        summaries = training_model.summaries
 
-    #     loss_data_cpu = chainer.cuda.to_cpu(loss.data)
-    #     psnr_data_cpu = chainer.cuda.to_cpu(psnr_all.data)
+        loss_data_cpu = chainer.cuda.to_cpu(loss.data)
+        psnr_data_cpu = chainer.cuda.to_cpu(psnr_all.data)
 
-    #     local_losses.append(loss_data_cpu)
-    #     local_psnr_all.append(psnr_data_cpu)
-    #     training_model.reset_state()
+        local_losses.append(loss_data_cpu)
+        local_psnr_all.append(psnr_data_cpu)
+        training_model.reset_state()
 
-    #     logger.info("{0} {1}".format(str(epoch+1), str(loss.data)))
-    #     loss, psnr_all, loss_data_cpu, psnr_data_cpu = None, None, None, None
+        logger.info("{0} {1}".format(str(epoch+1), str(loss.data)))
+        loss, psnr_all, loss_data_cpu, psnr_data_cpu = None, None, None, None
 
     #     if train_iter.is_new_epoch:
     #         stop_time = time.time()
