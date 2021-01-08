@@ -497,7 +497,7 @@ class Model(chainer.Chain):
         super(Model, self).__init__()
 
         with self.init_scope():
-	    self.enc0 = L.Convolution2D(32, (5, 5), stride=2, pad=2)
+            self.enc0 = L.Convolution2D(32, (5, 5), stride=2, pad=2)
             self.enc1 = L.Convolution2D(32, (3, 3), stride=2, pad=1)
             self.enc2 = L.Convolution2D(64, (3, 3), stride=2, pad=1)
             self.enc3 = L.Convolution2D(64, (1, 1), stride=1)

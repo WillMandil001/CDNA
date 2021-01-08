@@ -48,7 +48,6 @@ class DataFormatter():
             data_set_length = 1000  # 1001
             frameRate = 1.0/10.0        # It will capture image in each 0.5 second
 
-
             for i in tqdm(range(0, data_set_length)):
                 # robot_positions_new_sample = pd.read_csv(data_dir + 'robot_EE_pose_and_vel/data_set_' + str(i) + '.csv', header=None)
                 robot_positions_new_sample = pd.read_csv(data_dir + 'robot_pos/data_set_' + str(i) + '_robot_data_store_position' + '.csv', header=None)
@@ -60,13 +59,15 @@ class DataFormatter():
                     image_names_labels__ = []
                     for t in range(0, sequence_length):
                         robot_state = robot_positions_new_sample.iloc[j+t].values.flatten()
-                        robot_positions__.append(robot_state)  # position = 0:3; pose = 0:
+                        robot_positions__.append(robot_state[0:5])  # position = 0:3; pose = 0:
                         image_names__.append([data_dir + 'camera_1_video/rgb_video/sample_' + str(i) + '.mp4',((j+t) * frameRate)])  # [video location, frame]
                         image_names_labels__.append([data_dir + 'camera_1_video/rgb_video/sample_' + str(i) + '.mp4',((j+t+1) * frameRate)])  # [video location, frame]
-                    robot_positions.append([item for sublist in robot_positions__ for item in sublist])
+                    # robot_positions.append([sublist for sublist in robot_positions__])
+                    # robot_positions.append([item for sublist in robot_positions__ for item in sublist])  # original
+                    # robot_positions.append([tuple(state) for state in robot_positions__])  # works for our priblem (but is 7 dimensional and theirs takes 5)
+                    robot_positions.append([state for state in robot_positions__])  # this works for testing their system
                     image_names.append(image_names__)
                     image_names_labels.append(image_names_labels__)
-                break
             self.image_names = np.asarray(image_names)
             self.robot_positions = np.asarray(robot_positions)
 
@@ -78,11 +79,12 @@ class DataFormatter():
 
 
     def process_data(self):
-        for j in range(0, len(self.image_names)):
+        # for j in tqdm(range(0, int(len(self.image_names) / 10))):
+        for j in tqdm(range(0, int(32*20))):
             raw = []
             vidcap = cv2.VideoCapture(self.image_names[j][0][0])
 
-            for k in xrange(len(self.image_names[j])):
+            for k in range(len(self.image_names[j])):
                 tmp = Image.fromarray(self.getFrame(float(self.image_names[j][k][1]), vidcap), 'RGB')
                 tmp = tmp.resize((self.image_resize_height, self.image_resize_width), Image.ANTIALIAS)
                 tmp = np.fromstring(tmp.tobytes(), dtype=np.uint8)
@@ -96,7 +98,7 @@ class DataFormatter():
 
             ### save png data
             if self.create_img == 1:
-                for k in xrange(raw.shape[0]):
+                for k in range(raw.shape[0]):
                     img = Image.fromarray(raw[k], 'RGB')
                     img.save(self.out_dir + '/image_batch_' + str(j) + '_' + str(k) + '.png')
                 ref.append('image_batch_' + str(j) + '_*' + '.png')
@@ -107,10 +109,15 @@ class DataFormatter():
             np.save(self.out_dir + '/image_batch_' + str(j), raw)
 
             ### save np action
-            np.save(self.out_dir + '/action_batch_' + str(j), self.robot_positions[j][1:])
+            # print("============================")
+            # print(self.robot_positions[j][1:])
+            np.save(self.out_dir + '/action_batch_' + str(j), self.robot_positions[j])
 
             ### save np states
-            np.save(self.out_dir + '/state_batch_' + str(j), self.robot_positions[j][0:-2])
+            # print(self.robot_positions[j][0:-2])
+            # print("============================")
+            # np.save(self.out_dir + '/state_batch_' + str(j), self.robot_positions[j])
+            np.save(self.out_dir + '/state_batch_' + str(j), self.robot_positions[j])  # original
 
             # save names for map file
             ref.append('image_batch_' + str(j) + '.npy')
@@ -120,7 +127,7 @@ class DataFormatter():
             # Image used in prediction
             if self.create_img_prediction == 1:
                 pred = []
-                for k in xrange(len(self.image_names[j])):
+                for k in range(len(self.image_names[j])):
                     img = Image.fromarray(self.getFrame(float(self.image_names[j][k][1]), vidcap), 'RGB')
                     img.save(self.out_dir + '/image_batch_pred_' + str(j) + '_' + str(k) + '.png')
                     pred.append(np.array(img))
@@ -142,7 +149,7 @@ class DataFormatter():
 
     def save_data_to_map(self):
         self.logger.info("Writing the results into map file '{0}'".format('map.csv'))
-        with open(self.out_dir + '/map.csv', 'wb') as csvfile:
+        with open(self.out_dir + '/map.csv', 'w') as csvfile:
             writer = csv.writer(csvfile, quoting=csv.QUOTE_ALL)
             writer.writerow(['id', 'img_bitmap_path', 'img_np_path', 'action_np_path', 'state_np_path', 'img_bitmap_pred_path', 'img_np_pred_path'])
             for row in self.csv_ref:

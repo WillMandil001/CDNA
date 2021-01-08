@@ -1,6 +1,9 @@
 To Do list:
 
-1. Generate a map.csv file from the strawberry dataset -- format_data.py
-2. Use map.csv to create live data generator -- train.py
-3.
-4.
+11. train the model -- ensure the data is in correct format -- playground/train.py
+12.
+
+
+------
+How do they generate the data:
+1.
