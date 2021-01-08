@@ -675,8 +675,7 @@ class ModelTrainer():
         except:
             pass
 
-    # def train(self, train_iter, valid_iter, logger, images_training, actions_training, states_training, images_validation, actions_validation, states_validation, grouped_set_training, grouped_set_validation):
-    def train(self, train_iter, valid_iter, logger, images_training):
+    def train(self, train_iter, valid_iter, logger, images_training, validation_interval, save_interval, output_dir, model_suffix_dir, training_suffix, validation_suffix, state_suffix, current_version):
         # Run training
         # As per Finn's implementation, one epoch is run on one batch size, randomly, but never more than once.
         # At the end of the queue, if the epochs len is not reach, the queue is generated again. 
@@ -724,6 +723,91 @@ class ModelTrainer():
             logger.info("{0} {1}".format(str(epoch+1), str(loss.data)))
             loss, psnr_all, loss_data_cpu, psnr_data_cpu = None, None, None, None
 
+            if train_iter.is_new_epoch:
+                stop_time = time.time()
+                logger.info("[TRAIN] Epoch #: {}".format(epoch+1))
+                logger.info("[TRAIN] Epoch elapsed time: {}".format(stop_time-start_time))
+
+                local_losses = np.array(local_losses)
+                local_psnr_all = np.array(local_psnr_all)
+                global_losses.append([local_losses.mean(), local_losses.std(), local_losses.min(), local_losses.max(), np.median(local_losses)])
+                global_psnr_all.append([local_psnr_all.mean(), local_psnr_all.std(), local_psnr_all.min(), local_psnr_all.max(), np.median(local_psnr_all)])
+
+                logger.info("[TRAIN] epoch loss: {}".format(local_losses.mean()))
+                logger.info("[TRAIN] epoch psnr: {}".format(local_psnr_all.mean()))
+
+                local_losses, local_psnr_all = [], []
+                start_time, stop_time = None, None
+
+            if train_iter.is_new_epoch and epoch+1 % validation_interval == 0:
+
+                start_time = time.time()
+                for batch in valid_iter:
+                    logger.info("Begining validation for mini-batch {0}/{1} of epoch {2}".format(str(valid_iter.current_position), str(len(images_validation)), str(epoch+1)))
+                    img_validation_set, act_validation_set, sta_validation_set = concat_examples(batch)
+                    #x_validation = concat_examples(batch)
+
+                    # Run through validation set
+                    #loss_valid, psnr_all_valid, summaries_valid = validation_model(img_validation_set, act_validation_set, sta_validation_set, epoch, schedsamp_k, use_state, num_masks, context_frames)
+                    with chainer.using_config('train', False):
+                        loss_valid = self.training_model([self.xp.array(img_validation_set), self.xp.array(self.xp.act_validation_set), self.xp.array(sta_validation_set)], itr)
+
+                    psnr_all_valid = self.training_model.psnr_all
+                    summaries_valid = self.training_model.summaries
+
+                    loss_valid_data_cpu = chainer.cuda.to_cpu(loss_valid.data)
+                    psnr_all_valid_data_cpu = chainer.cuda.to_cpu(psnr_all_valid.data)
+
+                    local_losses_valid.append(loss_valid_data_cpu)
+                    local_psnr_all_valid.append(psnr_all_valid_data_cpu)
+                    self.training_model.reset_state()
+
+                    loss_valid, psnr_all_valid, loss_valid_data_cpu, psnr_all_valid_data_cpu = None, None, None, None
+                stop_time = time.time()
+                logger.info("[VALID] Epoch #: {}".format(epoch+1))
+                logger.info("[VALID] epoch elapsed time: {}".format(stop_time-start_time))
+
+                local_losses_valid = np.array(local_losses_valid)
+                local_psnr_all_valid = np.array(local_psnr_all_valid)
+                global_losses_valid.append([local_losses_valid.mean(), local_losses_valid.std(), local_losses_valid.min(), local_losses_valid.max(), np.median(local_losses_valid)])
+                global_psnr_all_valid.append([local_psnr_all_valid.mean(), local_psnr_all_valid.std(), local_psnr_all_valid.min(), local_psnr_all_valid.max(), np.median(local_psnr_all_valid)])
+
+                logger.info("[VALID] epoch loss: {}".format(local_losses_valid.mean()))
+                logger.info("[VALID] epoch psnr: {}".format(local_psnr_all_valid.mean()))
+
+                local_losses_valid, local_psnr_all_valid = [], []
+                start_time, stop_time = None, None
+
+                valid_iter.reset()
+                self.training_model.reset_state()
+
+            if train_iter.is_new_epoch and epoch % save_interval == 0:
+            #if epoch % save_interval == 0:
+                logger.info('Saving model')
+
+                save_dir = output_dir + '/' + model_suffix_dir
+                if not os.path.exists(save_dir):
+                    os.makedirs(save_dir)
+                    # Save the version of the code
+                    f = open(save_dir + '/version', 'w')
+                    f.write(current_version + '\n')
+                    f.close()
+
+                serializers.save_npz(save_dir + '/' + training_suffix + '-' + str(epoch), self.training_model)
+                #serializers.save_npz(save_dir + '/' + validation_suffix + '-' + str(epoch), validation_model)
+                serializers.save_npz(save_dir + '/' + state_suffix + '-' + str(epoch), self.optimizer)
+                np.save(save_dir + '/' + training_suffix + '-global_losses', np.array(global_losses))
+                np.save(save_dir + '/' + training_suffix + '-global_psnr_all', np.array(global_psnr_all))
+                np.save(save_dir + '/' + training_suffix + '-global_losses_valid', np.array(global_losses_valid))
+                np.save(save_dir + '/' + training_suffix + '-global_psnr_all', np.array(global_psnr_all_valid))
+
+            #for summ in summaries:
+                #logger.info(summ)
+            summaries = []
+            #for summ_valid in summaries_valid:
+                #logger.info(summ_valid)
+            summaries_valid = []
+            itr += 1
     def train_single_epoch(self):
         pass
 
@@ -809,7 +893,11 @@ class DataGenerator():
 @click.option('--use_state', type=click.INT, default=1, help='Whether or not to give the state+action to the model.')
 @click.option('--context_frames', type=click.INT, default=2, help='Number of frames before predictions.')
 @click.option('--num_masks', type=click.INT, default=10, help='Number of masks, usually 1 for DNA, 10 for CDNA, STP.')
-def main(learning_rate, gpu, batch_size, num_iterations, data_dir, train_val_split, schedsamp_k, use_state, context_frames, num_masks):
+@click.option('--validation_interval', type=click.INT, default=200, help='How often to run a batch through the validation model')
+@click.option('--save_interval', type=click.INT, default=50, help='How often to save a model checkpoint')
+@click.option('--output_dir', type=click.Path(), default='models', help='Directory for model checkpoints.')
+@click.option('--current_version', type=click.STRING, default="001", help='Directory for model checkpoints.')
+def main(learning_rate, gpu, batch_size, num_iterations, data_dir, train_val_split, schedsamp_k, use_state, context_frames, num_masks, validation_interval, save_interval, output_dir,current_version):
     logger = logging.getLogger(__name__)
     logger.info('Training the model')
     logger.info('Model: {}'.format("CDNA"))
@@ -818,16 +906,10 @@ def main(learning_rate, gpu, batch_size, num_iterations, data_dir, train_val_spl
     logger.info('# Num iterations: {}'.format(num_iterations))
     logger.info('# epoch: {}'.format(round(num_iterations/batch_size)))
 
-    # mempool = cupy.get_default_memory_pool()
-    # print(cupy.get_default_memory_pool().get_limit())
-    # print(" -------------      ",mempool.total_bytes())
-    # pinned_mempool = cupy.get_default_pinned_memory_pool()
-
-    # with cupy.cuda.Device(0):
-        # mempool.malloc(size=1024**3)
-        # mempool.set_limit()
-
-    # cupy.cuda.memory.MemoryPool.set_limit(size=1024**3)  # 1 GiB
+    model_suffix_dir = "{0}-{1}-{2}".format(time.strftime("%Y%m%d-%H%M%S"), "CDNA", batch_size)
+    training_suffix = "{0}".format('training')
+    validation_suffix = "{0}".format('validation')
+    state_suffix = "{0}".format('state')
 
     ### Initialise the model
     model_trainer = ModelTrainer(learning_rate, gpu, num_iterations, schedsamp_k, use_state, context_frames, num_masks)    # Generate model trainer.
@@ -841,7 +923,7 @@ def main(learning_rate, gpu, batch_size, num_iterations, data_dir, train_val_spl
     train_iter, valid_iter = data_generator.train_iter(batch_size)
     data = data_generator.return_Data()
     ### Train model:
-    model_trainer.train(train_iter, valid_iter, logger, data[0])
+    model_trainer.train(train_iter, valid_iter, logger, data[0], validation_interval, save_interval, output_dir, model_suffix_dir, training_suffix, validation_suffix, state_suffix, current_version)
 
 
 if __name__ == '__main__':

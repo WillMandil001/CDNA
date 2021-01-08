@@ -962,92 +962,92 @@ def main(output_dir, event_log_dir, num_iterations, pretrained_model, pretrained
         logger.info("{0} {1}".format(str(epoch+1), str(loss.data)))
         loss, psnr_all, loss_data_cpu, psnr_data_cpu = None, None, None, None
 
-    #     if train_iter.is_new_epoch:
-    #         stop_time = time.time()
-    #         logger.info("[TRAIN] Epoch #: {}".format(epoch+1))
-    #         logger.info("[TRAIN] Epoch elapsed time: {}".format(stop_time-start_time))
-
-    #         local_losses = np.array(local_losses)
-    #         local_psnr_all = np.array(local_psnr_all)
-    #         global_losses.append([local_losses.mean(), local_losses.std(), local_losses.min(), local_losses.max(), np.median(local_losses)])
-    #         global_psnr_all.append([local_psnr_all.mean(), local_psnr_all.std(), local_psnr_all.min(), local_psnr_all.max(), np.median(local_psnr_all)])
-
-    #         logger.info("[TRAIN] epoch loss: {}".format(local_losses.mean()))
-    #         logger.info("[TRAIN] epoch psnr: {}".format(local_psnr_all.mean()))
-
-    #         local_losses, local_psnr_all = [], []
-    #         start_time, stop_time = None, None
-
-    #     if train_iter.is_new_epoch and epoch+1 % validation_interval == 0:
-
-    #         start_time = time.time()
-    #         for batch in valid_iter:
-    #             logger.info("Begining validation for mini-batch {0}/{1} of epoch {2}".format(str(valid_iter.current_position), str(len(images_validation)), str(epoch+1)))
-    #             img_validation_set, act_validation_set, sta_validation_set = concat_examples(batch)
-    #             #x_validation = concat_examples(batch)
-                
-    #             # Run through validation set
-    #             #loss_valid, psnr_all_valid, summaries_valid = validation_model(img_validation_set, act_validation_set, sta_validation_set, epoch, schedsamp_k, use_state, num_masks, context_frames)
-    #             with chainer.using_config('train', False):
-    #                 loss_valid = training_model([xp.array(img_validation_set), xp.array(xp.act_validation_set), xp.array(sta_validation_set)], itr)
-
-    #             psnr_all_valid = training_model.psnr_all
-    #             summaries_valid = training_model.summaries
-
-    #             loss_valid_data_cpu = chainer.cuda.to_cpu(loss_valid.data)
-    #             psnr_all_valid_data_cpu = chainer.cuda.to_cpu(psnr_all_valid.data)
-
-    #             local_losses_valid.append(loss_valid_data_cpu)
-    #             local_psnr_all_valid.append(psnr_all_valid_data_cpu)
-    #             training_model.reset_state()
-
-    #             loss_valid, psnr_all_valid, loss_valid_data_cpu, psnr_all_valid_data_cpu = None, None, None, None
-    #         stop_time = time.time()
-    #         logger.info("[VALID] Epoch #: {}".format(epoch+1))
-    #         logger.info("[VALID] epoch elapsed time: {}".format(stop_time-start_time))
-
-    #         local_losses_valid = np.array(local_losses_valid)
-    #         local_psnr_all_valid = np.array(local_psnr_all_valid)
-    #         global_losses_valid.append([local_losses_valid.mean(), local_losses_valid.std(), local_losses_valid.min(), local_losses_valid.max(), np.median(local_losses_valid)])
-    #         global_psnr_all_valid.append([local_psnr_all_valid.mean(), local_psnr_all_valid.std(), local_psnr_all_valid.min(), local_psnr_all_valid.max(), np.median(local_psnr_all_valid)])
-
-    #         logger.info("[VALID] epoch loss: {}".format(local_losses_valid.mean()))
-    #         logger.info("[VALID] epoch psnr: {}".format(local_psnr_all_valid.mean()))
-
-    #         local_losses_valid, local_psnr_all_valid = [], []
-    #         start_time, stop_time = None, None
-            
-    #         valid_iter.reset()
-    #         training_model.reset_state()
-
-    #     if train_iter.is_new_epoch and epoch % save_interval == 0:
-    #     #if epoch % save_interval == 0:
-    #         logger.info('Saving model')
-
-    #         save_dir = output_dir + '/' + model_suffix_dir
-    #         if not os.path.exists(save_dir):
-    #             os.makedirs(save_dir)
-    #             # Save the version of the code
-    #             f = open(save_dir + '/version', 'w')
-    #             f.write(current_version + '\n')
-    #             f.close()
-
-    #         serializers.save_npz(save_dir + '/' + training_suffix + '-' + str(epoch), training_model)
-    #         #serializers.save_npz(save_dir + '/' + validation_suffix + '-' + str(epoch), validation_model)
-    #         serializers.save_npz(save_dir + '/' + state_suffix + '-' + str(epoch), optimizer)
-    #         np.save(save_dir + '/' + training_suffix + '-global_losses', np.array(global_losses))
-    #         np.save(save_dir + '/' + training_suffix + '-global_psnr_all', np.array(global_psnr_all))
-    #         np.save(save_dir + '/' + training_suffix + '-global_losses_valid', np.array(global_losses_valid))
-    #         np.save(save_dir + '/' + training_suffix + '-global_psnr_all', np.array(global_psnr_all_valid))
-
-    #     #for summ in summaries:
-    #         #logger.info(summ)
-    #     summaries = []
-    #     #for summ_valid in summaries_valid:
-    #         #logger.info(summ_valid)
-    #     summaries_valid = []
-    #     itr += 1
-    
+        # if train_iter.is_new_epoch:
+        #     stop_time = time.time()
+        #     logger.info("[TRAIN] Epoch #: {}".format(epoch+1))
+        #     logger.info("[TRAIN] Epoch elapsed time: {}".format(stop_time-start_time))
+        #
+        #     local_losses = np.array(local_losses)
+        #     local_psnr_all = np.array(local_psnr_all)
+        #     global_losses.append([local_losses.mean(), local_losses.std(), local_losses.min(), local_losses.max(), np.median(local_losses)])
+        #     global_psnr_all.append([local_psnr_all.mean(), local_psnr_all.std(), local_psnr_all.min(), local_psnr_all.max(), np.median(local_psnr_all)])
+        #
+        #     logger.info("[TRAIN] epoch loss: {}".format(local_losses.mean()))
+        #     logger.info("[TRAIN] epoch psnr: {}".format(local_psnr_all.mean()))
+        #
+        #     local_losses, local_psnr_all = [], []
+        #     start_time, stop_time = None, None
+        #
+        # if train_iter.is_new_epoch and epoch+1 % validation_interval == 0:
+        #
+        #     start_time = time.time()
+        #     for batch in valid_iter:
+        #         logger.info("Begining validation for mini-batch {0}/{1} of epoch {2}".format(str(valid_iter.current_position), str(len(images_validation)), str(epoch+1)))
+        #         img_validation_set, act_validation_set, sta_validation_set = concat_examples(batch)
+        #         #x_validation = concat_examples(batch)
+        #
+        #         # Run through validation set
+        #         #loss_valid, psnr_all_valid, summaries_valid = validation_model(img_validation_set, act_validation_set, sta_validation_set, epoch, schedsamp_k, use_state, num_masks, context_frames)
+        #         with chainer.using_config('train', False):
+        #             loss_valid = training_model([xp.array(img_validation_set), xp.array(xp.act_validation_set), xp.array(sta_validation_set)], itr)
+        #
+        #         psnr_all_valid = training_model.psnr_all
+        #         summaries_valid = training_model.summaries
+        #
+        #         loss_valid_data_cpu = chainer.cuda.to_cpu(loss_valid.data)
+        #         psnr_all_valid_data_cpu = chainer.cuda.to_cpu(psnr_all_valid.data)
+        #
+        #         local_losses_valid.append(loss_valid_data_cpu)
+        #         local_psnr_all_valid.append(psnr_all_valid_data_cpu)
+        #         training_model.reset_state()
+        #
+        #         loss_valid, psnr_all_valid, loss_valid_data_cpu, psnr_all_valid_data_cpu = None, None, None, None
+        #     stop_time = time.time()
+        #     logger.info("[VALID] Epoch #: {}".format(epoch+1))
+        #     logger.info("[VALID] epoch elapsed time: {}".format(stop_time-start_time))
+        #
+        #     local_losses_valid = np.array(local_losses_valid)
+        #     local_psnr_all_valid = np.array(local_psnr_all_valid)
+        #     global_losses_valid.append([local_losses_valid.mean(), local_losses_valid.std(), local_losses_valid.min(), local_losses_valid.max(), np.median(local_losses_valid)])
+        #     global_psnr_all_valid.append([local_psnr_all_valid.mean(), local_psnr_all_valid.std(), local_psnr_all_valid.min(), local_psnr_all_valid.max(), np.median(local_psnr_all_valid)])
+        #
+        #     logger.info("[VALID] epoch loss: {}".format(local_losses_valid.mean()))
+        #     logger.info("[VALID] epoch psnr: {}".format(local_psnr_all_valid.mean()))
+        #
+        #     local_losses_valid, local_psnr_all_valid = [], []
+        #     start_time, stop_time = None, None
+        #
+        #     valid_iter.reset()
+        #     training_model.reset_state()
+        #
+        # if train_iter.is_new_epoch and epoch % save_interval == 0:
+        # #if epoch % save_interval == 0:
+        #     logger.info('Saving model')
+        #
+        #     save_dir = output_dir + '/' + model_suffix_dir
+        #     if not os.path.exists(save_dir):
+        #         os.makedirs(save_dir)
+        #         # Save the version of the code
+        #         f = open(save_dir + '/version', 'w')
+        #         f.write(current_version + '\n')
+        #         f.close()
+        #
+        #     serializers.save_npz(save_dir + '/' + training_suffix + '-' + str(epoch), training_model)
+        #     #serializers.save_npz(save_dir + '/' + validation_suffix + '-' + str(epoch), validation_model)
+        #     serializers.save_npz(save_dir + '/' + state_suffix + '-' + str(epoch), optimizer)
+        #     np.save(save_dir + '/' + training_suffix + '-global_losses', np.array(global_losses))
+        #     np.save(save_dir + '/' + training_suffix + '-global_psnr_all', np.array(global_psnr_all))
+        #     np.save(save_dir + '/' + training_suffix + '-global_losses_valid', np.array(global_losses_valid))
+        #     np.save(save_dir + '/' + training_suffix + '-global_psnr_all', np.array(global_psnr_all_valid))
+        #
+        # #for summ in summaries:
+        #     #logger.info(summ)
+        # summaries = []
+        # #for summ_valid in summaries_valid:
+        #     #logger.info(summ_valid)
+        # summaries_valid = []
+        # itr += 1
+        #
 
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
