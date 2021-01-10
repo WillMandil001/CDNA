@@ -79,8 +79,8 @@ class DataFormatter():
 
 
     def process_data(self):
-        # for j in tqdm(range(0, int(len(self.image_names) / 10))):
-        for j in tqdm(range(0, int(32*20))):
+        for j in tqdm(range(0, int(len(self.image_names) / 2))):
+        # for j in tqdm(range(0, int(32*20))):
             raw = []
             vidcap = cv2.VideoCapture(self.image_names[j][0][0])
 

@@ -28,7 +28,9 @@ from chainer import initializers
 from chainer import serializers
 from chainer.functions.math import square
 from chainer.functions.activation import lstm
-# import cupy.cuda.cudnn
+
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 
 import sys
 import os
@@ -49,7 +51,6 @@ DNA_KERN_SIZE = 5
 # =============================================
 # Helpers functions used accross scripts (hlpe)
 # =============================================
-
 def concat_examples(batch):
     img_training_set, act_training_set, sta_training_set = [], [], []
     for idx in xrange(len(batch)):
@@ -66,6 +67,41 @@ def concat_examples(batch):
     act_training_set = [np.squeeze(act, axis=1) for act in act_training_set]
     # print(act_training_set)
     # print(sta_training_set)
+    sta_training_set = np.split(ary=sta_training_set, indices_or_sections=sta_training_set.shape[1], axis=1)
+    sta_training_set = [np.squeeze(sta, axis=1) for sta in sta_training_set]
+    img_training_set = np.split(ary=img_training_set, indices_or_sections=img_training_set.shape[1], axis=1)
+    # Reshape the img training set to a Chainer compatible tensor : batch x channel x height x width instead of Tensorflow's: batch x height x width x channel
+    img_training_set = [np.rollaxis(np.squeeze(img, axis=1), 3, 1) for img in img_training_set]
+
+    return np.array(img_training_set), np.array(act_training_set), np.array(sta_training_set)
+
+def load_and_concat_examples(batch):
+    img_training_set, act_training_set, sta_training_set = [], [], []
+    for idx in xrange(len(batch)):
+        img_training_set.append(batch[idx][0])
+        act_training_set.append(batch[idx][1])
+        sta_training_set.append(batch[idx][2])
+
+    images = []
+    actions = []
+    states = []
+
+    for i in xrange(0, len(img_training_set)):
+        images.append(np.float32(np.load(img_training_set[i])))
+        actions.append(np.float32(np.load(act_training_set[i])))
+        states.append(np.float32(np.load(sta_training_set[i])))
+
+    img_training_set = np.asarray(images, dtype=np.float32)
+    act_training_set = np.asarray(actions, dtype=np.float32)
+    sta_training_set = np.asarray(states, dtype=np.float32)
+
+    img_training_set = np.array(img_training_set)
+    act_training_set = np.array(act_training_set)
+    sta_training_set = np.array(sta_training_set)
+
+    # Split the actions, states and images into timestep
+    act_training_set = np.split(ary=act_training_set, indices_or_sections=act_training_set.shape[1], axis=1)
+    act_training_set = [np.squeeze(act, axis=1) for act in act_training_set]
     sta_training_set = np.split(ary=sta_training_set, indices_or_sections=sta_training_set.shape[1], axis=1)
     sta_training_set = [np.squeeze(sta, axis=1) for sta in sta_training_set]
     img_training_set = np.split(ary=img_training_set, indices_or_sections=img_training_set.shape[1], axis=1)
@@ -537,8 +573,7 @@ class Model(chainer.Chain):
                 prev_image = variable.Variable(image)
 
             # Predicted state is always fed back in
-            # state_action = np.asarray(zip(action, current_state))  # Willow -- trying to get state_action in correct format - state action still the same so have to change this too!!!
-            state_action = F.concat((action, current_state), axis=1)  # Original: axis=1
+            state_action = F.concat((action, current_state), axis=1)
 
             """ Execute the ops array of transformations """
             # If an ops has a name of "ops" it means it's a custom ops
@@ -630,10 +665,11 @@ class Model(chainer.Chain):
 
 
 class ModelTrainer():
-    def __init__(self, learning_rate, gpu, num_iterations, schedsamp_k, use_state, context_frames, num_masks):
+    def __init__(self, learning_rate, gpu, num_iterations, schedsamp_k, use_state, context_frames, num_masks, batch_size):
         self.gpu = gpu
         self.num_masks = num_masks
         self.use_state = use_state
+        self.batch_size = batch_size
         self.schedsamp_k = schedsamp_k
         self.learning_rate = learning_rate
         self.context_frames = context_frames
@@ -649,7 +685,7 @@ class ModelTrainer():
             chainer.cuda.get_device_from_id(self.gpu).use()
             self.training_model.to_gpu()
             self.xp = cupy
-            self.xp.cuda.alloc_pinned_memory(5*1024**3)  # 5gb
+            self.xp.cuda.alloc_pinned_memory(7*1024**3)  # 8gb
             print(self.xp.get_default_memory_pool().total_bytes())
         else:
             self.xp = np
@@ -675,7 +711,7 @@ class ModelTrainer():
         except:
             pass
 
-    def train(self, train_iter, valid_iter, logger, images_training, validation_interval, save_interval, output_dir, model_suffix_dir, training_suffix, validation_suffix, state_suffix, current_version):
+    def train(self, train_iter, valid_iter, logger, images_training, validation_interval, save_interval, output_dir, model_suffix_dir, training_suffix, validation_suffix, state_suffix, current_version, generator_type):
         # Run training
         # As per Finn's implementation, one epoch is run on one batch size, randomly, but never more than once.
         # At the end of the queue, if the epochs len is not reach, the queue is generated again. 
@@ -695,14 +731,18 @@ class ModelTrainer():
         start_time = None
         stop_time = None
 
-        for itr in range(0, self.num_iterations):
+        progress_bar = tqdm(range(0, self.num_iterations), total=(self.num_iterations/self.batch_size)) 
+        for itr in progress_bar:
             epoch = train_iter.epoch
             batch = train_iter.next()
-            img_training_set, act_training_set, sta_training_set = concat_examples(batch)
+
+            if generator_type == 0:
+                img_training_set, act_training_set, sta_training_set = concat_examples(batch)
+            elif generator_type == 1:
+                img_training_set, act_training_set, sta_training_set = load_and_concat_examples(batch)
 
             # Perform training
-            logger.info("Begining training for mini-batch {0}/{1} of epoch {2}".format(str(train_iter.current_position), str(len(images_training)), str(epoch+1)))
-            logger.info("Global iteration: {}".format(str(itr+1)))
+            # logger.info("Global iteration: {}".format(str(itr+1)))
             loss = self.training_model(cupy.asarray(img_training_set, dtype=cupy.float32), 
                                         cupy.asarray(act_training_set, dtype=cupy.float32), 
                                         cupy.asarray(sta_training_set, dtype=cupy.float32), epoch)
@@ -720,7 +760,11 @@ class ModelTrainer():
             local_psnr_all.append(psnr_data_cpu)
             self.training_model.reset_state()
 
-            logger.info("{0} {1}".format(str(epoch+1), str(loss.data)))
+            # logger.info("Begining training for mini-batch {0}/{1} of epoch {2}, LOSS={3}".format(str(train_iter.current_position), str(len(images_training)), str(epoch+1), str(loss.data)))
+
+            progress_bar.set_description("epoch: {}, ".format(epoch) + "loss: {:.4f}, ".format(float(loss.data)) + "mean loss: {:.4f}, ".format(float(np.mean(np.array(local_losses)))) + "mean psmr: {:.4f}".format(float(np.mean(np.array(local_psnr_all)))))
+            progress_bar.update()
+
             loss, psnr_all, loss_data_cpu, psnr_data_cpu = None, None, None, None
 
             if train_iter.is_new_epoch:
@@ -743,14 +787,19 @@ class ModelTrainer():
 
                 start_time = time.time()
                 for batch in valid_iter:
-                    logger.info("Begining validation for mini-batch {0}/{1} of epoch {2}".format(str(valid_iter.current_position), str(len(images_validation)), str(epoch+1)))
-                    img_validation_set, act_validation_set, sta_validation_set = concat_examples(batch)
-                    #x_validation = concat_examples(batch)
+                    if generator_type == 0:
+                        img_validation_set, act_validation_set, sta_validation_set = concat_examples(batch)
+                    elif generator_type == 1:
+                        img_validation_set, act_validation_set, sta_validation_set = load_and_concat_examples(batch)
+                    
+                    # logger.info("Begining validation for mini-batch of epoch {0}".format(str(epoch+1)))
 
                     # Run through validation set
-                    #loss_valid, psnr_all_valid, summaries_valid = validation_model(img_validation_set, act_validation_set, sta_validation_set, epoch, schedsamp_k, use_state, num_masks, context_frames)
+                    # loss_valid, psnr_all_valid, summaries_valid = validation_model(img_validation_set, act_validation_set, sta_validation_set, epoch, schedsamp_k, use_state, num_masks, context_frames)
                     with chainer.using_config('train', False):
-                        loss_valid = self.training_model([self.xp.array(img_validation_set), self.xp.array(self.xp.act_validation_set), self.xp.array(sta_validation_set)], itr)
+                        loss_valid = self.training_model(cupy.asarray(img_validation_set, dtype=cupy.float32), 
+                                                        cupy.asarray(act_validation_set, dtype=cupy.float32), 
+                                                        cupy.asarray(sta_validation_set, dtype=cupy.float32), itr)
 
                     psnr_all_valid = self.training_model.psnr_all
                     summaries_valid = self.training_model.summaries
@@ -807,16 +856,15 @@ class ModelTrainer():
             #for summ_valid in summaries_valid:
                 #logger.info(summ_valid)
             summaries_valid = []
-            itr += 1
+
     def train_single_epoch(self):
         pass
 
     def train_single_batch(self):
         pass
 
-
 class DataGenerator():
-    def __init__(self, batch_size, logger, data_dir, train_val_split):
+    def __init__(self, batch_size, logger, data_dir, train_val_split, generator_type):
         data_map = []
         with open(data_dir + '/map.csv', 'rb') as f:  # rb
             reader = csv.reader(f)
@@ -831,15 +879,21 @@ class DataGenerator():
         images = []
         actions = []
         states = []
-        for i in xrange(1, len(data_map)):  # Exclude the header
-            #logger.info("Loading data {0}/{1}".format(i, len(data_map)-1))
-            images.append(np.float32(np.load(data_dir + '/' + data_map[i][2])))
-            actions.append(np.float32(np.load(data_dir + '/' + data_map[i][3])))
-            states.append(np.float32(np.load(data_dir + '/' + data_map[i][4])))
 
-        images = np.asarray(images, dtype=np.float32)
-        actions = np.asarray(actions, dtype=np.float32)
-        states = np.asarray(states, dtype=np.float32)
+        if generator_type == 0:
+            for i in tqdm(xrange(1, len(data_map))):  # Exclude the header
+                images.append(np.float32(np.load(data_dir + '/' + data_map[i][2])))
+                actions.append(np.float32(np.load(data_dir + '/' + data_map[i][3])))
+                states.append(np.float32(np.load(data_dir + '/' + data_map[i][4])))
+
+                images = np.asarray(images, dtype=np.float32)
+                actions = np.asarray(actions, dtype=np.float32)
+                states = np.asarray(states, dtype=np.float32)
+        elif generator_type == 1:
+            for i in tqdm(xrange(1, len(data_map))):  # Exclude the header
+                images.append(str(data_dir + '/' + data_map[i][2]))
+                actions.append(str(data_dir + '/' + data_map[i][3]))
+                states.append(str(data_dir + '/' + data_map[i][4]))
 
         train_val_split_index = int(np.floor(train_val_split * len(images)))
         self.images_training = np.asarray(images[:train_val_split_index])
@@ -883,21 +937,22 @@ class DataGenerator():
 # Main entry point of the training processes (main)
 # =================================================
 @click.command()
-@click.option('--learning_rate', type=click.FLOAT, default=0.001, help='The base learning rate of the generator.')
+@click.option('--learning_rate', type=click.FLOAT, default=0.01, help='The base learning rate of the generator. was 0.001')
 @click.option('--gpu', type=click.INT, default=0, help='ID of the gpu(s) to use')
-@click.option('--batch_size', type=click.INT, default=5, help='Batch size for training.')
-@click.option('--num_iterations', type=click.INT, default=500, help='Number of training iterations. Number of epoch is: num_iterations/batch_size.')  # 1/4 of 1000 dataset sample was 14204
+@click.option('--batch_size', type=click.INT, default=20, help='Batch size for training.')
+@click.option('--num_iterations', type=click.INT, default=26987, help='Number of training iterations. Number of epoch is: num_iterations/batch_size.')  # 1/4 of 1000 dataset sample was 14204
 @click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/Data_sets/CDNA_data/processed', help='Directory containing data.')
 @click.option('--train_val_split', type=click.FLOAT, default=0.95, help='The percentage of data to use for the training set, vs. the validation set.')
 @click.option('--schedsamp_k', type=click.FLOAT, default=900.0, help='The k parameter for schedules sampling. -1 for no scheduled sampling.')
 @click.option('--use_state', type=click.INT, default=1, help='Whether or not to give the state+action to the model.')
 @click.option('--context_frames', type=click.INT, default=2, help='Number of frames before predictions.')
 @click.option('--num_masks', type=click.INT, default=10, help='Number of masks, usually 1 for DNA, 10 for CDNA, STP.')
-@click.option('--validation_interval', type=click.INT, default=200, help='How often to run a batch through the validation model')
-@click.option('--save_interval', type=click.INT, default=50, help='How often to save a model checkpoint')
+@click.option('--validation_interval', type=click.INT, default=1, help='How often to run a batch through the validation model')
+@click.option('--save_interval', type=click.INT, default=1, help='How often to save a model checkpoint (set to 50 orgionally)')
 @click.option('--output_dir', type=click.Path(), default='models', help='Directory for model checkpoints.')
-@click.option('--current_version', type=click.STRING, default="001", help='Directory for model checkpoints.')
-def main(learning_rate, gpu, batch_size, num_iterations, data_dir, train_val_split, schedsamp_k, use_state, context_frames, num_masks, validation_interval, save_interval, output_dir,current_version):
+@click.option('--current_version', type=click.STRING, default="001", help='Model Version for saving and logging')
+@click.option('--generator_type', type=click.INT, default=1, help='0 = Load full data first (for small datasets), 1 = Load data on fly as training (for large datasets)')
+def main(learning_rate, gpu, batch_size, num_iterations, data_dir, train_val_split, schedsamp_k, use_state, context_frames, num_masks, validation_interval, save_interval, output_dir,current_version, generator_type):
     logger = logging.getLogger(__name__)
     logger.info('Training the model')
     logger.info('Model: {}'.format("CDNA"))
@@ -912,18 +967,18 @@ def main(learning_rate, gpu, batch_size, num_iterations, data_dir, train_val_spl
     state_suffix = "{0}".format('state')
 
     ### Initialise the model
-    model_trainer = ModelTrainer(learning_rate, gpu, num_iterations, schedsamp_k, use_state, context_frames, num_masks)    # Generate model trainer.
+    model_trainer = ModelTrainer(learning_rate, gpu, num_iterations, schedsamp_k, use_state, context_frames, num_masks, batch_size)    # Generate model trainer.
     model_trainer.create_model()                        # Create the model.
     model_trainer.create_opimiser()                     # Create the optimizers for the models.
     model_trainer.gpu_support()                         # Enable GPU if required.
 
     ### Generate the training data
     logger.info("Fetching the models and inputs")
-    data_generator = DataGenerator(batch_size, logger, data_dir, train_val_split) 
+    data_generator = DataGenerator(batch_size, logger, data_dir, train_val_split, generator_type) 
     train_iter, valid_iter = data_generator.train_iter(batch_size)
     data = data_generator.return_Data()
     ### Train model:
-    model_trainer.train(train_iter, valid_iter, logger, data[0], validation_interval, save_interval, output_dir, model_suffix_dir, training_suffix, validation_suffix, state_suffix, current_version)
+    model_trainer.train(train_iter, valid_iter, logger, data[0], validation_interval, save_interval, output_dir, model_suffix_dir, training_suffix, validation_suffix, state_suffix, current_version, generator_type)
 
 
 if __name__ == '__main__':
