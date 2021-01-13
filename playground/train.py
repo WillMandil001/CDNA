@@ -685,7 +685,7 @@ class ModelTrainer():
             chainer.cuda.get_device_from_id(self.gpu).use()
             self.training_model.to_gpu()
             self.xp = cupy
-            self.xp.cuda.alloc_pinned_memory(7*1024**3)  # 8gb
+            self.xp.cuda.alloc_pinned_memory(5*1024**3)  # 8gb
             print(self.xp.get_default_memory_pool().total_bytes())
         else:
             self.xp = np
@@ -831,7 +831,7 @@ class ModelTrainer():
                 self.training_model.reset_state()
 
             if train_iter.is_new_epoch and epoch % save_interval == 0:
-            #if epoch % save_interval == 0:
+                #if epoch % save_interval == 0:
                 logger.info('Saving model')
 
                 save_dir = output_dir + '/' + model_suffix_dir
@@ -937,10 +937,10 @@ class DataGenerator():
 # Main entry point of the training processes (main)
 # =================================================
 @click.command()
-@click.option('--learning_rate', type=click.FLOAT, default=0.01, help='The base learning rate of the generator. was 0.001')
+@click.option('--learning_rate', type=click.FLOAT, default=0.001, help='The base learning rate of the generator. was 0.001')
 @click.option('--gpu', type=click.INT, default=0, help='ID of the gpu(s) to use')
 @click.option('--batch_size', type=click.INT, default=20, help='Batch size for training.')
-@click.option('--num_iterations', type=click.INT, default=26987, help='Number of training iterations. Number of epoch is: num_iterations/batch_size.')  # 1/4 of 1000 dataset sample was 14204
+@click.option('--num_iterations', type=click.INT, default=int(50*26987), help='Number of training iterations. Number of epoch is: num_iterations/batch_size.')  # 1/4 of 1000 dataset sample was 14204
 @click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/Data_sets/CDNA_data/processed', help='Directory containing data.')
 @click.option('--train_val_split', type=click.FLOAT, default=0.95, help='The percentage of data to use for the training set, vs. the validation set.')
 @click.option('--schedsamp_k', type=click.FLOAT, default=900.0, help='The k parameter for schedules sampling. -1 for no scheduled sampling.')
