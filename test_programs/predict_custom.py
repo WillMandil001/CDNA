@@ -69,8 +69,8 @@ def get_data_info(data_dir, data_index):
 # Main entry point of the training processes (main)
 # =================================================
 @click.command()
-@click.option('--model_dir', type=click.STRING, default='20210113-202803-CDNA-20', help='Directory containing model.')
-@click.option('--model_name', type=click.STRING, default='training-11', help='The name of the model.')
+@click.option('--model_dir', type=click.STRING, default='20210113-223332-CDNA-16', help='Directory containing model.')
+@click.option('--model_name', type=click.STRING, default='training-0', help='The name of the model.')
 @click.option('--data_index', type=click.INT, default=40, help='Directory containing data.')
 @click.option('--models_dir', type=click.Path(exists=True), default='models', help='Directory containing the models.')
 @click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/Data_sets/CDNA_data/processed_custom', help='Directory containing data.')

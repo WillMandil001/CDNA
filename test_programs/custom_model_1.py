@@ -945,9 +945,9 @@ class DataGenerator():
 @click.command()
 @click.option('--learning_rate', type=click.FLOAT, default=0.001, help='The base learning rate of the generator. was 0.001')
 @click.option('--gpu', type=click.INT, default=0, help='ID of the gpu(s) to use')
-@click.option('--batch_size', type=click.INT, default=32, help='Batch size for training.')
-@click.option('--num_iterations', type=click.INT, default=int(50*26987), help='Number of training iterations. Number of epoch is: num_iterations/batch_size.')  # 50*5654 1/4 of 1000 dataset sample was 14204
-@click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/Data_sets/CDNA_data/processed_custom', help='Directory containing data.')
+@click.option('--batch_size', type=click.INT, default=16, help='Batch size for training.')
+@click.option('--num_iterations', type=click.INT, default=int(50*14149), help='Number of training iterations. Number of epoch is: num_iterations/batch_size.')  # 50*5654 1/4 of 1000 dataset sample was 14204
+@click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/Data_sets/CDNA_data/processed_custom_medium', help='Directory containing data.')
 @click.option('--train_val_split', type=click.FLOAT, default=0.95, help='The percentage of data to use for the training set, vs. the validation set.')
 @click.option('--schedsamp_k', type=click.FLOAT, default=900.0, help='The k parameter for schedules sampling. -1 for no scheduled sampling.')
 @click.option('--use_state', type=click.INT, default=1, help='Whether or not to give the state+action to the model.')
