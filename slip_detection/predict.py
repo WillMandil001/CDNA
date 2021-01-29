@@ -6,12 +6,16 @@
 
 import numpy as np
 import chainer
+import random
 from chainer import cuda
 import chainer.functions as F
 from matplotlib import pyplot as plt
 
-from model import Model
-from model import concat_examples
+# from model import Model
+# from model import concat_examples
+from model_shape_001 import Model
+from model_shape_001 import concat_examples
+
 
 try:
     import cupy
@@ -35,7 +39,49 @@ import imageio
 # Helpers functions (hlpr)
 # ========================
 
-def get_data_info(data_dir, data_index, get_changing_data):
+
+# img_training_set, act_training_set, sta_training_set = [], [], []
+# for idx in xrange(len(batch)):
+#     img_training_set.append(batch[idx][0])
+#     act_training_set.append(batch[idx][1])
+#     sta_training_set.append(batch[idx][2])
+
+# images = []
+# actions = []
+# states = []
+
+# for i in xrange(0, len(img_training_set)):
+#     images.append(np.float32(np.load(img_training_set[i])))
+#     actions.append(np.float32(np.load(act_training_set[i])))
+#     states.append(np.float32(np.load(sta_training_set[i])))
+
+# img_training_set = np.asarray(images, dtype=np.float32)
+# act_training_set = np.asarray(actions, dtype=np.float32)
+# sta_training_set = np.asarray(states, dtype=np.float32)
+
+# img_training_set = np.array(img_training_set)
+# act_training_set = np.array(act_training_set)
+# sta_training_set = np.array(sta_training_set)
+
+# # Split the actions, states and images into timestep
+# act_training_set = np.split(ary=act_training_set, indices_or_sections=act_training_set.shape[1], axis=1)
+# act_training_set = [np.squeeze(act, axis=1) for act in act_training_set]
+# sta_training_set = np.split(ary=sta_training_set, indices_or_sections=sta_training_set.shape[1], axis=1)
+# sta_training_set = [np.squeeze(sta, axis=1) for sta in sta_training_set]
+# img_training_set = np.split(ary=img_training_set, indices_or_sections=img_training_set.shape[1], axis=1)
+# # Reshape the img training set to a Chainer compatible tensor : batch x channel x height x width instead of Tensorflow's: batch x height x width x channel
+# img_training_set = [np.rollaxis(np.squeeze(img, axis=1), 3, 1) for img in img_training_set]
+
+# if process_channel:
+#     single_channel_image = np.zeros((len(img_training_set), img_training_set[0].shape[0], 1, img_training_set[0].shape[2], img_training_set[0].shape[3]))
+#     for i in range(0, len(img_training_set)):
+#         for j in range(0, len(img_training_set[0])):
+#             single_channel_image[0][0][0] = img_training_set[0][0][process_channel]
+#     img_training_set = single_channel_image
+
+# return np.array(img_training_set), np.array(act_training_set), np.array(sta_training_set)
+
+def get_data_info(data_dir, data_index, get_changing_data, process_channel):
     data_map = []
     with open(data_dir + '/map.csv', 'rb') as f:
         reader = csv.reader(f)
@@ -45,17 +91,26 @@ def get_data_info(data_dir, data_index, get_changing_data):
     if len(data_map) <= 1: # empty or only header
         raise ValueError("No file map found")
 
+    data_map = data_map[1:]
+    random.shuffle(data_map)
     # Get the requested data to test
-    breaker = 0
     if get_changing_data == 1:
         for i in range(1, len(data_map)):
-            image = np.float32(np.load(data_dir + '/' + data_map[i][2]))
-            for j in range(0, len(image) - 1):
-                if np.sum(image[j] - image[j+1]) * 255 > 10 or np.sum(image[j] - image[j+1]) * 255 < -10:
-                    data_index = i
-                    print(i, )
-                    breaker = 1
-            if breaker:
+            breaker = 0
+            slip_list = np.load(data_dir + '/' + data_map[i][7])
+            if '1.0' in slip_list and '0.0' in slip_list:
+                print("data_index = ", i, slip_list)
+                breaker += 1
+            image = np.float32(np.load(data_dir + '/' + data_map[data_index][2]))
+            for i in range(1, len(image)):
+                change = np.sum(image[i-1] * 255) - np.sum(image[i] * 255)
+                if change > 20 or change < -20:
+                    print(np.sum(image[i-1] * 255))
+                    print(np.sum(image[i] * 255))
+                    print("==============")
+                    breaker += 1
+            if breaker == 2:
+                data_index = i-1
                 break
 
     data_index = int(data_index)+1
@@ -69,22 +124,23 @@ def get_data_info(data_dir, data_index, get_changing_data):
     image_bitmap_pred = data_map[data_index][5]
     action = np.float32(np.load(data_dir + '/' + data_map[data_index][3]))
     state = np.float32(np.load(data_dir + '/' + data_map[data_index][4]))
+    slip_list = np.float32(np.load(data_dir + '/' + data_map[data_index][7]))
 
-    # from matplotlib import pyplot as plt
-    # for i in image:
-    #     plt.imshow(i)
-    #     plt.show(block=False)
-    #     plt.pause(0.5)
+    if process_channel:
+        single_channel_image = image[:,:,:, process_channel-1:process_channel]
+        image = single_channel_image
 
-    return image, image_pred, image_bitmap_pred, action, state
+    print(image.shape)
+
+    return image, image_pred, image_bitmap_pred, action, state, slip_list
 
 # =================================================
 # Main entry point of the training processes (main)
 # =================================================
 @click.command()
-@click.option('--model_dir', type=click.STRING, default='20210124-143736-CDNA-16', help='Directory containing model.')
-@click.option('--model_name', type=click.STRING, default='training-30', help='The name of the model.')
-@click.option('--data_index', type=click.INT, default=20, help='Directory containing data.')
+@click.option('--model_dir', type=click.STRING, default='20210126-184247-CDNA-32', help='Directory containing model.')  # channel 0: 20210126-215647-CDNA-32 ||| channel 1: 20210126-184247-CDNA-32
+@click.option('--model_name', type=click.STRING, default='training-20', help='The name of the model.')
+@click.option('--data_index', type=click.INT, default=200, help='Directory containing data.')
 @click.option('--get_changing_data', type=click.INT, default=1, help='Should the program look for a test sample where there is change in the time step.')
 @click.option('--models_dir', type=click.Path(exists=True), default='models', help='Directory containing the models.')
 @click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/Data_sets/CDNA_data/4x4_tactile', help='Directory containing data.')
@@ -101,7 +157,8 @@ def get_data_info(data_dir, data_index, get_changing_data):
 @click.option('--downscale_factor', type=click.FLOAT, default=1, help='Downscale the image by this factor. (was 0.5)')
 @click.option('--gpu', type=click.INT, default=0, help='ID of the gpu to use')
 @click.option('--gif', type=click.INT, default=1, help='Create a GIF of the predicted result.')
-def main(model_dir, model_name, data_index, get_changing_data, models_dir, data_dir, time_step, model_type, schedsamp_k, context_frames, use_state, num_masks, image_height, image_width, original_image_height, original_image_width, downscale_factor, gpu, gif):
+@click.option('--process_channel', type=click.INT, default=3, help='if you want to train on a single channel')
+def main(model_dir, model_name, data_index, get_changing_data, models_dir, data_dir, time_step, model_type, schedsamp_k, context_frames, use_state, num_masks, image_height, image_width, original_image_height, original_image_width, downscale_factor, gpu, gif, process_channel):
     """ Predict the next {time_step} frame based on a trained {model} """
     logger = logging.getLogger(__name__)
     path = models_dir + '/' + model_dir
@@ -111,7 +168,7 @@ def main(model_dir, model_name, data_index, get_changing_data, models_dir, data_
         raise ValueError("Directory {} does not exists".format(data_dir))
 
     logger.info("Loading data {}".format(data_index))
-    image, image_pred, image_bitmap_pred, action, state = get_data_info(data_dir, data_index, get_changing_data)
+    image, image_pred, image_bitmap_pred, action, state, slip_list = get_data_info(data_dir, data_index, get_changing_data, process_channel)
     
     img_pred, act_pred, sta_pred = concat_examples([[image, action, state]])
 
@@ -151,54 +208,34 @@ def main(model_dir, model_name, data_index, get_changing_data, models_dir, data_
                      0)
         predicted_images = model.gen_images
     
-    f, axarr = plt.subplots(2,9)
-    axarr[0,0].imshow(cupy.asnumpy(predicted_images[0].data[0] * 255).astype(np.uint8).T)
-    axarr[0,0].set_title("0: P: {0}".format(int(np.sum(cupy.asnumpy(predicted_images[0].data[0] * 255).astype(np.uint8).T))))
-    axarr[0,1].imshow(cupy.asnumpy(predicted_images[1].data[0] * 255).astype(np.uint8).T)
-    axarr[0,1].set_title("1: P: {0}".format(int(np.sum(cupy.asnumpy(predicted_images[1].data[0] * 255).astype(np.uint8).T))))
-    axarr[0,2].imshow(cupy.asnumpy(predicted_images[2].data[0] * 255).astype(np.uint8).T)
-    axarr[0,2].set_title("2: P: {0}".format(int(np.sum(cupy.asnumpy(predicted_images[2].data[0] * 255).astype(np.uint8).T))))
-    axarr[0,3].imshow(cupy.asnumpy(predicted_images[3].data[0] * 255).astype(np.uint8).T)
-    axarr[0,3].set_title("3: P: {0}".format(int(np.sum(cupy.asnumpy(predicted_images[3].data[0] * 255).astype(np.uint8).T))))
-    axarr[0,4].imshow(cupy.asnumpy(predicted_images[4].data[0] * 255).astype(np.uint8).T)
-    axarr[0,4].set_title("4: P: {0}".format(int(np.sum(cupy.asnumpy(predicted_images[4].data[0] * 255).astype(np.uint8).T))))
-    axarr[0,5].imshow(cupy.asnumpy(predicted_images[5].data[0] * 255).astype(np.uint8).T)
-    axarr[0,5].set_title("5: P: {0}".format(int(np.sum(cupy.asnumpy(predicted_images[5].data[0] * 255).astype(np.uint8).T))))
-    axarr[0,6].imshow(cupy.asnumpy(predicted_images[6].data[0] * 255).astype(np.uint8).T)
-    axarr[0,6].set_title("6: P: {0}".format(int(np.sum(cupy.asnumpy(predicted_images[6].data[0] * 255).astype(np.uint8).T))))
-    axarr[0,7].imshow(cupy.asnumpy(predicted_images[7].data[0] * 255).astype(np.uint8).T)
-    axarr[0,7].set_title("7: P: {0}".format(int(np.sum(cupy.asnumpy(predicted_images[7].data[0] * 255).astype(np.uint8).T))))
-    axarr[0,8].imshow(cupy.asnumpy(predicted_images[8].data[0] * 255).astype(np.uint8).T)
-    axarr[0,8].set_title("8: P: {0}".format(int(np.sum(cupy.asnumpy(predicted_images[8].data[0] * 255).astype(np.uint8).T))))
+    image = image*255
+    f, axarr = plt.subplots(2,len(image))
     axarr[0,0].set_ylabel("Pred", rotation=90, size='large')
-
-    axarr[1,0].imshow(image[0]*255)
-    axarr[1,0].set_title("0: GT: {0}".format(int(np.sum(image[0]*255))))
-    axarr[1,1].imshow(image[1]*255)
-    axarr[1,1].set_title("1: GT: {0}".format(int(np.sum(image[1]*255))))
-    axarr[1,2].imshow(image[2]*255)
-    axarr[1,2].set_title("2: GT: {0}".format(int(np.sum(image[2]*255))))
-    axarr[1,3].imshow(image[3]*255)
-    axarr[1,3].set_title("3: GT: {0}".format(int(np.sum(image[3]*255))))
-    axarr[1,4].imshow(image[4]*255)
-    axarr[1,4].set_title("4: GT: {0}".format(int(np.sum(image[4]*255))))
-    axarr[1,5].imshow(image[5]*255)
-    axarr[1,5].set_title("5: GT: {0}".format(int(np.sum(image[5]*255))))
-    axarr[1,6].imshow(image[6]*255)
-    axarr[1,6].set_title("6: GT: {0}".format(int(np.sum(image[6]*255))))
-    axarr[1,7].imshow(image[7]*255)
-    axarr[1,7].set_title("7: GT: {0}".format(int(np.sum(image[7]*255))))
-    axarr[1,8].imshow(image[8]*255)
-    axarr[1,8].set_title("8: GT: {0}".format(int(np.sum(image[8]*255))))
     axarr[1,0].set_ylabel("GT", rotation=90, size='large')
+    for i in range(0, len(image)):
+        if process_channel:
+            colour = 'gray'
+            if i == 0:
+                axarr[0,i].imshow(np.ones((4,4)),cmap=colour)
+                axarr[0,i].set_title("{0}".format(i), fontsize=8)
+            else:
+                axarr[0,i].imshow((cupy.asnumpy(predicted_images[i-1].data[0] * 255).astype(np.uint8)[0].T), cmap=colour)
+                axarr[0,i].set_title("{0}: P: {1}".format(i, int(np.sum(cupy.asnumpy(predicted_images[i-1].data[0] * 255).astype(np.uint8).T))), fontsize=8)
 
+            axarr[1,i].imshow(image[i].astype(np.uint8).T[0], cmap=colour)
+            axarr[1,i].set_title("{0}: GT: {1} S:{2}".format(i, int(np.sum(image[0].astype(np.uint8).T[0])), slip_list[i]), fontsize=7)
+        else:
+            if i == 0:
+                axarr[0,i].imshow(np.ones((4,4,1)),cmap=colour)
+                axarr[0,i].set_title("{0}".format(i), fontsize=8)
+            else:
+                axarr[0,i].imshow((cupy.asnumpy(predicted_images[i].data[0] * 255).astype(np.uint8).T).transpose(1, 0, 2), cmap=colour)
+                axarr[0,i].set_title("{0}: P: {1}".format(i, int(np.sum(cupy.asnumpy(predicted_images[i].data[0] * 255).astype(np.uint8).T))), fontsize=8)
+
+            axarr[1,i].imshow(image[i].astype(np.uint8), cmap=colour)
+            axarr[1,i].set_title("{0}: GT: {1} S:{2}".format(i, int(np.sum(image[i].astype(np.uint8))), slip_list[i]), fontsize=7)
     plt.show()
-
     print(aa)
-
-
-
-
 
     # Resize the predicted image
     resize_predicted_images = []

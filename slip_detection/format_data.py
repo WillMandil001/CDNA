@@ -52,9 +52,15 @@ class DataFormatter():
                 if file[0:55] == "/home/user/Robotics/slip_detection_franka/Dataset/xelaS":
                     tactile_sensor_files.append(file)
 
+            slip_labels_files = []
+            for file in sorted(files):
+                if file[0:55] == "/home/user/Robotics/slip_detection_franka/Dataset/label":
+                    slip_labels_files.append(file)
+
             robot_positions = []
             image_names = []
             image_names_labels = []
+            slip_labels = []
             frequency_rate = 10
 
             min_max_calc = []
@@ -64,29 +70,34 @@ class DataFormatter():
                 for val in vals:
                     min_max_calc.append(val)
             self.min_max = self.find_min_max(min_max_calc)
-            self.normal_scalar = 255 / (self.min_max[1] - self.min_max[0])  # change in values
-            self.sheerx_scalar = 255 / (self.min_max[3] - self.min_max[2])  # change in values
-            self.sheery_scalar = 255 / (self.min_max[5] - self.min_max[4])  # change in values
+            # self.normal_scalar = 255 / (self.min_max[1] - self.min_max[0])  # change in values
+            # self.sheerx_scalar = 255 / (self.min_max[3] - self.min_max[2])  # change in values
+            # self.sheery_scalar = 255 / (self.min_max[5] - self.min_max[4])  # change in values
             for i in range(1, data_set_length):
                 images_new_sample = np.asarray(pd.read_csv(tactile_sensor_files[i], header=None))[1:]
                 robot_positions_new_sample = np.asarray(pd.read_csv(robot_pos_files[i], header=None))
                 robot_positions_files = np.asarray([robot_positions_new_sample[j*frequency_rate] for j in range(1, min(len(images_new_sample), int(len(robot_positions_new_sample)/frequency_rate)))])
                 images_new_sample = images_new_sample[1:len(robot_positions_files)+1]
+                slip_labels_sample = np.asarray(pd.read_csv(slip_labels_files[i], header=None)[1:])
 
                 for j in range(1, len(robot_positions_files) - sequence_length):  # 1 IGNORES THE HEADER
                     robot_positions__ = []
                     images = []
                     images_labels = []
+                    slip_labels_sample__ = []
                     for t in range(0, sequence_length):
                         robot_positions__.append(self.convert_to_state(robot_positions_files[t]))  # Convert from HTM to euler task space and quaternion orientation.
                         images.append(self.create_image(images_new_sample[j+t]))  # [video location, frame]
                         images_labels.append(images_new_sample[j+t+1])  # [video location, frame]
+                        slip_labels_sample__.append(slip_labels_sample[j+t][2])
                         # images_name.append()
                         # images_labels_name.append()
                     robot_positions.append([state for state in robot_positions__])  # this works for testing their system
                     image_names.append(images)
                     image_names_labels.append(images_labels)
+                    slip_labels.append(slip_labels_sample__)
 
+            self.slip_labels = np.asarray(slip_labels)
             self.robot_positions = np.asarray(robot_positions)
             self.image_names = np.asarray(image_names)
             self.image_names_labels = np.asarray(image_names_labels)
@@ -111,7 +122,7 @@ class DataFormatter():
                 sheerx_min = min(vals[:, :, 1].flatten())
                 sheerx_max = max(vals[:, :, 1].flatten())
                 sheery_min = min(vals[:, :, 2].flatten())
-                sheery_max = max(vals[:, :, 2].flatten())     
+                sheery_max = max(vals[:, :, 2].flatten())
 
         return [normal_min, normal_max, sheerx_min, sheerx_max, sheery_min, sheery_max]
 
@@ -120,9 +131,14 @@ class DataFormatter():
         image = image.reshape(4,4,3)
         for x in range(0, len(image[0])):
             for y in range(0, len(image[1])):
-                image[x][y][0] = self.normal_scalar * (image[x][y][0] - self.min_max[0])
-                image[x][y][1] = self.sheerx_scalar * (image[x][y][1] - self.min_max[2])
-                image[x][y][2] = self.sheery_scalar * (image[x][y][2] - self.min_max[4])
+                # image[x][y][0] = self.normal_scalar * (image[x][y][0] - self.min_max[0])
+                # image[x][y][1] = self.sheerx_scalar * (image[x][y][1] - self.min_max[2])
+                # image[x][y][2] = self.sheery_scalar * (image[x][y][2] - self.min_max[4])
+                # Normalise:
+                image[x][y][0] = ((image[x][y][0] - self.min_max[0]) / (self.min_max[1] - self.min_max[0])) * 255
+                image[x][y][1] = ((image[x][y][1] - self.min_max[2]) / (self.min_max[3] - self.min_max[2])) * 255
+                image[x][y][2] = ((image[x][y][2] - self.min_max[4]) / (self.min_max[5] - self.min_max[4])) * 255
+
         image = np.asarray(image.astype(int))
         # plt.imshow((image.astype(np.float32) / 255.0))
         # plt.show()
@@ -157,15 +173,13 @@ class DataFormatter():
             np.save(self.out_dir + '/image_batch_' + str(j), raw)
 
             ### save np action
-            # print("============================")
-            # print(self.robot_positions[j][1:])
             np.save(self.out_dir + '/action_batch_' + str(j), self.robot_positions[j])
 
             ### save np states
-            # print(self.robot_positions[j][0:-2])
-            # print("============================")
-            # np.save(self.out_dir + '/state_batch_' + str(j), self.robot_positions[j])
             np.save(self.out_dir + '/state_batch_' + str(j), self.robot_positions[j])  # original
+
+            ### save np images
+            np.save(self.out_dir + '/slip_label_batch_' + str(j), self.slip_labels[j])
 
             # save names for map file
             ref.append('image_batch_' + str(j) + '.npy')
@@ -186,6 +200,8 @@ class DataFormatter():
                 ref.append('')
                 ref.append('')
 
+            ref.append('slip_label_batch_' + str(j) + '.npy')
+
             ### Append all file names for this sample to CSV file for training.
             self.csv_ref.append(ref)
 
@@ -198,13 +214,13 @@ class DataFormatter():
         self.logger.info("Writing the results into map file '{0}'".format('map.csv'))
         with open(self.out_dir + '/map.csv', 'w') as csvfile:
             writer = csv.writer(csvfile, quoting=csv.QUOTE_ALL)
-            writer.writerow(['id', 'img_bitmap_path', 'img_np_path', 'action_np_path', 'state_np_path', 'img_bitmap_pred_path', 'img_np_pred_path'])
+            writer.writerow(['id', 'img_bitmap_path', 'img_np_path', 'action_np_path', 'state_np_path', 'img_bitmap_pred_path', 'img_np_pred_path', 'slip_label'])
             for row in self.csv_ref:
                 writer.writerow(row)
 
 
 @click.command()
-@click.option('--data_set_length', type=click.INT, default=10, help='size of dataset to format.')
+@click.option('--data_set_length', type=click.INT, default=70, help='size of dataset to format.')
 @click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/slip_detection_franka/Dataset/', help='Directory containing data.')  # /home/user/Robotics/Data_sets/data_set_003/
 @click.option('--out_dir', type=click.Path(), default='/home/user/Robotics/Data_sets/CDNA_data/4x4_tactile', help='Output directory of the converted data.')
 @click.option('--sequence_length', type=click.INT, default=10, help='Sequence length, including context frames.')

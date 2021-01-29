@@ -1,0 +1,114 @@
+Core Structure:
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+''' LSTM pipeline''' 
+[Convolution2D(32, (5, 5), stride=2, pad=2), LayerNormalizationConv2D()],
+[BasicConvLSTMCell(32), LayerNormalizationConv2D(), ops_save("hidden1"), BasicConvLSTMCell(32), LayerNormalizationConv2D(), ops_save("hidden2"), Convolution2D(32, (3, 3), stride=2, pad=1)],
+[BasicConvLSTMCell(64), LayerNormalizationConv2D(), ops_save("hidden3"), BasicConvLSTMCell(64), LayerNormalizationConv2D(), ops_save("hidden4"), Convolution2D(64, (3, 3), stride=2, pad=1)],
+[ops_smear(use_state), Convolution2D(64, (1, 1), stride=1)],
+[BasicConvLSTMCell(128), LayerNormalizationConv2D(), ops_save("hidden5"), Deconvolution2D(128, (3, 3), stride=2, outsize=(16,16), pad=1)],
+[BasicConvLSTMCell(64), LayerNormalizationConv2D(), ops_save("hidden6"), ops_skip_connection(1), Deconvolution2D(96, (3, 3), stride=2, outsize=(32,32), pad=1)],
+[BasicConvLSTMCell(32), LayerNormalizationConv2D(), ops_save("hidden7"), ops_skip_connection(0), Deconvolution2D(64, (3, 3), stride=2, outsize=(64, 64), pad=1), LayerNormalizationConv2D()]
+[Deconvolution2D(in_channels=64, out_channels=3, ksize=(1,1), stride=1)]
+'''         ^^^^^^^^^^^^^          '''
+'''op_smear == concat with robot action and state '''
+''' Relu after every function in the lists'''
+[self.enc0, self.norm_enc0],
+[self.lstm1, self.hidden1, ops_save("hidden1"), self.lstm2, self.hidden2, ops_save("hidden2"), self.enc1],
+[self.lstm3, self.hidden3, ops_save("hidden3"), self.lstm4, self.hidden4, ops_save("hidden4"), self.enc2],
+[ops_smear(use_state), self.enc3],
+[self.lstm5, self.hidden5, ops_save("hidden5"), self.enc4],
+[self.lstm6, self.hidden6, ops_save("hidden6"), ops_skip_connection(1), self.enc5],
+[self.lstm7, self.hidden7, ops_save("hidden7"), ops_skip_connection(0), self.enc6, self.norm_enc6]
+[self.enc7]
+
+''' slip detection vvv '''
+[Convolution2D(in_channels=None, out_channels=8, ksize=(3, 3), stride=1, pad=1), LayerNormalizationConv2D()],
+[ BasicConvLSTMCell(8), LayerNormalizationConv2D(), ops_save("hidden1"),  BasicConvLSTMCell(8), LayerNormalizationConv2D(), ops_save("hidden2"), Convolution2D(in_channels=None, out_channels=8, ksize=(3, 3), stride=1, pad=1)],
+[ BasicConvLSTMCell(8), LayerNormalizationConv2D(), ops_save("hidden3"),  BasicConvLSTMCell(8), LayerNormalizationConv2D(), ops_save("hidden4"), Convolution2D(in_channels=None, out_channels=8, ksize=(3, 3), stride=1, pad=1)],
+[ops_smear(use_state), Convolution2D(in_channels=None, out_channels=8, ksize=(3, 3), stride=1, pad=1)],
+[ BasicConvLSTMCell(8), LayerNormalizationConv2D(), ops_save("hidden5")],
+[ BasicConvLSTMCell(8), LayerNormalizationConv2D(), ops_save("hidden6"), ops_skip_connection(1)],
+[ BasicConvLSTMCell(8), LayerNormalizationConv2D(), ops_save("hidden7"), ops_skip_connection(0), LayerNormalizationConv2D()]
+
+[self.enc0, self.norm_enc0],
+[self.lstm1, self.hidden1, ops_save("hidden1"), self.lstm2, self.hidden2, ops_save("hidden2"), self.enc1],
+[self.lstm3, self.hidden3, ops_save("hidden3"), self.lstm4, self.hidden4, ops_save("hidden4"), self.enc2],
+[ops_smear(use_state), self.enc3],
+[self.lstm5, self.hidden5, ops_save("hidden5")],
+[self.lstm6, self.hidden6, ops_save("hidden6"), ops_skip_connection(1)],
+[self.lstm7, self.hidden7, ops_save("hidden7"), ops_skip_connection(0), self.norm_enc6]
+
+''' Experimental '''
+[Convolution2D(in_channels=None, out_channels=8, ksize=(3, 3), stride=1, pad=1), LayerNormalizationConv2D()],
+[ BasicConvLSTMCell(8), LayerNormalizationConv2D(), ops_save("hidden1"),  BasicConvLSTMCell(8), LayerNormalizationConv2D(), ops_save("hidden2"), Convolution2D(in_channels=None, out_channels=8, ksize=(3, 3), stride=1, pad=1)],
+[ BasicConvLSTMCell(8), LayerNormalizationConv2D(), ops_save("hidden3"),  BasicConvLSTMCell(8), LayerNormalizationConv2D(), ops_save("hidden4"), Convolution2D(in_channels=None, out_channels=8, ksize=(3, 3), stride=1, pad=1)],
+[ops_smear(use_state), Convolution2D(in_channels=None, out_channels=8, ksize=(3, 3), stride=1, pad=1)],
+[ BasicConvLSTMCell(8), LayerNormalizationConv2D(), ops_save("hidden5")],
+[ BasicConvLSTMCell(8), LayerNormalizationConv2D(), ops_save("hidden6"), ops_skip_connection(1)],
+[ BasicConvLSTMCell(8), LayerNormalizationConv2D(), ops_save("hidden7"), ops_skip_connection(0), LayerNormalizationConv2D()]
+
+[self.enc0, self.norm_enc0],
+[self.lstm1, self.hidden1, ops_save("hidden1"), self.lstm2, self.hidden2, ops_save("hidden2"), self.enc1],
+[self.lstm3, self.hidden3, ops_save("hidden3"), self.lstm4, self.hidden4, ops_save("hidden4"), self.enc2],
+[ops_smear(use_state), self.enc3],
+[self.lstm5, self.hidden5, ops_save("hidden5")],
+[self.lstm6, self.hidden6, ops_save("hidden6"), ops_skip_connection(1)],
+[self.lstm7, self.hidden7, ops_save("hidden7"), ops_skip_connection(0), self.norm_enc6]
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+''' creation of the masks for application to the previous image '''
+OUTPUT FROM self.hidden5 -> Linear(in_size=None, out_size=DNA_KERN_SIZE * DNA_KERN_SIZE * num_masks) "cdna_kerns" -> reshape (B x C x H x W => B x NUM_MASKS x 1 x H x W) -> Relu -> Normalise 
+-> depthwise_convolution_2d(prev_image, cdna_kerns, stride=(1, 1), pad=DNA_KERN_SIZE/2) ("A list of masks to apply on the previous image")
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+""" Masks """
+self.masks = L.Deconvolution2D(num_masks+1, (1, 1), stride=1)
+masks = self.masks(enc6)
+masks = relu(masks)
+masks = reshape(masks, (-1, self.num_masks + 1))
+masks = softmax(masks)
+masks = reshape(masks, (int(batch_size), self.num_masks+1, int(img_height), int(img_width)))  # Previously num_mask at the end, but our channels are on axis=1? ok!
+mask_list = F.split_axis(masks, indices_or_sections=self.num_masks+1, axis=1)  # Previously axis=3 but our channels are on axis=1 ?
+
+output = broadcast_scale(prev_image, mask_list[0])
+for layer, mask in zip(transformed, mask_list[1:]):
+    output += broadcast_scale(layer, mask, axis=0)
+gen_images.append(output)
+
+current_state = self.current_state(state_action)
+gen_states.append(current_state)
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+''' Calculating L2 loss, PSNR'''
+loss, psnr_all = 0.0, 0.0
+summaries = []
+for i, x, gx in zip(range(len(gen_images)), images[self.num_frame_before_prediction:], gen_images[self.num_frame_before_prediction - 1:]):
+    x = variable.Variable(x)
+    recon_cost = F.mean_squared_error(x, gx)
+    psnr_i = peak_signal_to_noise_ratio(x, gx)
+    psnr_all += psnr_i
+    summaries.append(self.prefix + '_recon_cost' + str(i) + ': ' + str(recon_cost.data))
+    summaries.append(self.prefix + '_psnr' + str(i) + ': ' + str(psnr_i.data))
+    loss += recon_cost
+    # print(recon_cost.data)
+
+for i, state, gen_state in zip(range(len(gen_states)), states[self.num_frame_before_prediction:], gen_states[self.num_frame_before_prediction - 1:]):
+    state = variable.Variable(state)
+    state_cost = F.mean_squared_error(state, gen_state) * 1e-4
+    summaries.append(self.prefix + '_state_cost' + str(i) + ': ' + str(state_cost.data))
+    loss += state_cost
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+parameters:
+data sequence length = 10
+DNA_KERN_SIZE = 5
+learning_rate = 0.001
+num_masks = 10
+batch_size = 32
+context_frames = 2
+
+
+

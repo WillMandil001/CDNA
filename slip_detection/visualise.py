@@ -3,7 +3,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 
 
-data_dir = "/home/user/Robotics/CDNA/CDNA/slip_detection/models/20210124-143736-CDNA-16/"  # 20210124-143736-CDNA-16
+data_dir = "/home/user/Robotics/CDNA/CDNA/slip_detection/models/20210125-153921-CDNA-16/"  # 20210124-143736-CDNA-16
 
 # losses_train = np.load(data_dir + "training-global_losses.npy")
 # losses_valid = np.load(data_dir + "training-global_losses_valid.npy")

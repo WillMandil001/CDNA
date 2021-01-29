@@ -46,7 +46,7 @@ import matplotlib.pyplot as plt
 RELU_SHIFT = 1e-12
 
 # Kernel size for DNA and CDNA
-DNA_KERN_SIZE = 5
+DNA_KERN_SIZE = 3 ## could try 16 = 1 for every sensor? was 5
 
 # =============================================
 # Helpers functions used accross scripts (hlpe)
@@ -646,7 +646,7 @@ class Model(chainer.Chain):
             transformed, enc7 = self.model(
                 encs, hiddens,
                 batch_size, prev_image, self.num_masks, int(color_channels)
-            )
+            )  # StatelessCDNA
             encs.append(enc7)
 
             """ Masks """
@@ -774,9 +774,7 @@ class ModelTrainer():
             f = open(save_dir + '/version', 'w')
             f.write(current_version + '\n')
             f.close()
-
         serializers.save_npz(output_dir + '/' + model_suffix_dir + '/' + training_suffix + '-initialisation', self.training_model)
-        print(aaaa)
 
         progress_bar = tqdm(range(0, self.num_iterations), total=(self.num_iterations/self.batch_size)) 
         for itr in progress_bar:
@@ -995,7 +993,7 @@ class DataGenerator():
 @click.command()
 @click.option('--learning_rate', type=click.FLOAT, default=0.001, help='The base learning rate of the generator. was 0.001')
 @click.option('--gpu', type=click.INT, default=0, help='ID of the gpu(s) to use')
-@click.option('--batch_size', type=click.INT, default=16, help='Batch size for training.')
+@click.option('--batch_size', type=click.INT, default=32, help='Batch size for training.')
 @click.option('--num_iterations', type=click.INT, default=int(50*14149), help='Number of training iterations. Number of epoch is: num_iterations/batch_size.')  # 50*5654 1/4 of 1000 dataset sample was 14204
 @click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/Data_sets/CDNA_data/4x4_tactile', help='Directory containing data.')
 @click.option('--train_val_split', type=click.FLOAT, default=0.95, help='The percentage of data to use for the training set, vs. the validation set.')
