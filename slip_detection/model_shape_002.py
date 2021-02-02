@@ -3,7 +3,7 @@
 
 # Implementation in Chainer of https://github.com/tensorflow/models/tree/master/video_prediction
 # ==============================================================================================
-
+''' This model will just use one channel, to test just one aspect of the tactile sensor '''
 import math
 import types
 import random
@@ -46,7 +46,7 @@ import matplotlib.pyplot as plt
 RELU_SHIFT = 1e-12
 
 # Kernel size for DNA and CDNA
-DNA_KERN_SIZE = 3 ## could try 16 = 1 for every sensor? was 5
+DNA_KERN_SIZE = 5 ##  was 5
 
 # =============================================
 # Helpers functions used accross scripts (hlpe)
@@ -73,7 +73,7 @@ def concat_examples(batch):
 
     return np.array(img_training_set), np.array(act_training_set), np.array(sta_training_set)
 
-def load_and_concat_examples(batch):
+def load_and_concat_examples(batch, process_channel):
     img_training_set, act_training_set, sta_training_set = [], [], []
     for idx in xrange(len(batch)):
         img_training_set.append(batch[idx][0])
@@ -105,6 +105,16 @@ def load_and_concat_examples(batch):
     img_training_set = np.split(ary=img_training_set, indices_or_sections=img_training_set.shape[1], axis=1)
     # Reshape the img training set to a Chainer compatible tensor : batch x channel x height x width instead of Tensorflow's: batch x height x width x channel
     img_training_set = [np.rollaxis(np.squeeze(img, axis=1), 3, 1) for img in img_training_set]
+
+    if process_channel:
+        single_channel_image = np.zeros((len(img_training_set), img_training_set[0].shape[0], 1, img_training_set[0].shape[2], img_training_set[0].shape[3]))
+        for i in range(0, len(img_training_set)):
+            for j in range(0, len(img_training_set[0])):
+                single_channel_image[i][j][0] = img_training_set[i][j][process_channel-1]
+        img_training_set = single_channel_image
+    # print(img_training_set)
+    # print(img_training_set.shape)
+    # print(img_training_set[0][0])
 
     return np.array(img_training_set), np.array(act_training_set), np.array(sta_training_set)
 
@@ -319,11 +329,11 @@ class StatelessCDNA(chainer.Chain):
         * Because the CDNA does not keep states, it should be passed as a parameter if one wants to continue learning from previous states
     """
 
-    def __init__(self, num_masks):
+    def __init__(self, num_masks, process_channel):
         super(StatelessCDNA, self).__init__()
 
         with self.init_scope():
-            self.enc7 = L.Deconvolution2D(in_channels=16, out_channels=3, ksize=(1,1), stride=1)  # 64
+            self.enc7 = L.Deconvolution2D(in_channels=16, out_channels=1, ksize=(1,1), stride=1)  # 64
             self.cdna_kerns = L.Linear(in_size=None, out_size=DNA_KERN_SIZE * DNA_KERN_SIZE * num_masks)
 
         self.num_masks = num_masks
@@ -394,7 +404,7 @@ class Model(chainer.Chain):
         It calls their training and get the generated images and states, it then compute the losses and other various parameters
     """
 
-    def __init__(self, num_masks, is_cdna=True, use_state=True, scheduled_sampling_k=-1, num_frame_before_prediction=2, prefix=None):
+    def __init__(self, num_masks, is_cdna=True, use_state=True, scheduled_sampling_k=-1, num_frame_before_prediction=2, prefix=None, process_channel=0):
         """
             Initialize a CDNA, STP or DNA through this 'wrapper' Model
             Args:
@@ -407,61 +417,32 @@ class Model(chainer.Chain):
         """
         super(Model, self).__init__()
 
-        # with self.init_scope():
-        #     self.enc0 = L.Convolution2D(32, (5, 5), stride=2, pad=2)  # was (5, 5)
-        #     self.enc1 = L.Convolution2D(32, (3, 3), stride=2, pad=1)
-        #     self.enc2 = L.Convolution2D(64, (3, 3), stride=2, pad=1)
-        #     self.enc3 = L.Convolution2D(64, (1, 1), stride=1)
-
-        #     self.enc4 = L.Deconvolution2D(128, (3, 3), stride=2, outsize=(16,16), pad=1)
-        #     self.enc5 = L.Deconvolution2D(96, (3, 3), stride=2, outsize=(32,32), pad=1)
-        #     self.enc6 = L.Deconvolution2D(64, (3, 3), stride=2, outsize=(64, 64), pad=1)
-
-        #     self.lstm1 = BasicConvLSTMCell(32)
-        #     self.lstm2 = BasicConvLSTMCell(32)
-        #     self.lstm3 = BasicConvLSTMCell(64)
-        #     self.lstm4 = BasicConvLSTMCell(64)
-        #     self.lstm5 = BasicConvLSTMCell(128)
-        #     self.lstm6 = BasicConvLSTMCell(64)
-        #     self.lstm7 = BasicConvLSTMCell(32)
-
-        #     self.norm_enc0 = LayerNormalizationConv2D()
-        #     self.norm_enc6 = LayerNormalizationConv2D()
-        #     self.hidden1 = LayerNormalizationConv2D()
-        #     self.hidden2 = LayerNormalizationConv2D()
-        #     self.hidden3 = LayerNormalizationConv2D()
-        #     self.hidden4 = LayerNormalizationConv2D()
-        #     self.hidden5 = LayerNormalizationConv2D()
-        #     self.hidden6 = LayerNormalizationConv2D()
-        #     self.hidden7 = LayerNormalizationConv2D()
-
-        # self.ops = [
-        #     [self.enc0, self.norm_enc0],
-        #     [self.lstm1, self.hidden1, ops_save("hidden1"), self.lstm2, self.hidden2, ops_save("hidden2"), self.enc1],
-        #     [self.lstm3, self.hidden3, ops_save("hidden3"), self.lstm4, self.hidden4, ops_save("hidden4"), self.enc2],
-        #     [ops_smear(use_state), self.enc3],
-        #     [self.lstm5, self.hidden5, ops_save("hidden5"), self.enc4],
-        #     [self.lstm6, self.hidden6, ops_save("hidden6"), ops_skip_connection(1), self.enc5],
-        #     [self.lstm7, self.hidden7, ops_save("hidden7"), ops_skip_connection(0), self.enc6, self.norm_enc6]
-        # ]
-
         with self.init_scope():
-            self.enc0 = L.Convolution2D(in_channels=None, out_channels=8, ksize=(3, 3), stride=1, pad=1)
-            self.enc1 = L.Convolution2D(in_channels=None, out_channels=8, ksize=(3, 3), stride=1, pad=1)
-            self.enc2 = L.Convolution2D(in_channels=None, out_channels=8, ksize=(3, 3), stride=1, pad=1)
-            self.enc3 = L.Convolution2D(in_channels=None, out_channels=8, ksize=(3, 3), stride=1, pad=1)
+            #     self.enc0 = L.Convolution2D(32, (5, 5), stride=2, pad=2)  # was (5, 5)
+            #     self.enc1 = L.Convolution2D(32, (3, 3), stride=2, pad=1)
+            #     self.enc2 = L.Convolution2D(64, (3, 3), stride=2, pad=1)
+            #     self.enc3 = L.Convolution2D(64, (1, 1), stride=1)
 
-            # self.enc4 = L.Deconvolution2D(in_channels=None, out_channels=8, ksize=(3, 3), stride=1, outsize=(4, 4), pad=2)
-            # self.enc5 = L.Deconvolution2D(in_channels=None, out_channels=8, ksize=(3, 3), stride=1, outsize=(4, 4), pad=2)
-            # self.enc6 = L.Deconvolution2D(in_channels=None, out_channels=8, ksize=(3, 3), stride=1, outsize=(4, 4), pad=2)
+            #     self.enc4 = L.Deconvolution2D(128, (3, 3), stride=2, outsize=(16,16), pad=1)
+            #     self.enc5 = L.Deconvolution2D(96, (3, 3), stride=2, outsize=(32,32), pad=1)
+            #     self.enc6 = L.Deconvolution2D(64, (3, 3), stride=2, outsize=(64, 64), pad=1)
 
-            self.lstm1 = BasicConvLSTMCell(8)
-            self.lstm2 = BasicConvLSTMCell(8)
-            self.lstm3 = BasicConvLSTMCell(8)
-            self.lstm4 = BasicConvLSTMCell(8)
-            self.lstm5 = BasicConvLSTMCell(8)
-            self.lstm6 = BasicConvLSTMCell(8)
-            self.lstm7 = BasicConvLSTMCell(8)
+            self.enc0 = L.Convolution2D(in_channels=None, out_channels=16, ksize=(5, 5), stride=1, pad=2)
+            self.enc1 = L.Convolution2D(in_channels=None, out_channels=32, ksize=(3, 3), stride=2, pad=1)
+            self.enc2 = L.Convolution2D(in_channels=None, out_channels=64, ksize=(3, 3), stride=2, pad=1)
+            self.enc3 = L.Convolution2D(in_channels=None, out_channels=64, ksize=(1, 1), stride=1, pad=1)
+
+            self.enc4 = L.Deconvolution2D(128, (3, 3), stride=2, outsize=(16, 16), pad=2)
+            self.enc5 = L.Deconvolution2D(64, (3, 3), stride=2, outsize=(32, 32), pad=1)
+            self.enc6 = L.Deconvolution2D(16, (3, 3), stride=1, outsize=(32, 32), pad=1)
+
+            self.lstm1 = BasicConvLSTMCell(16)  # 32 shape
+            self.lstm2 = BasicConvLSTMCell(16)  # 32 shape
+            self.lstm3 = BasicConvLSTMCell(32)  # 16 shape
+            self.lstm4 = BasicConvLSTMCell(32)  # 16 shape
+            self.lstm5 = BasicConvLSTMCell(128) # 8 shape
+            self.lstm6 = BasicConvLSTMCell(64)
+            self.lstm7 = BasicConvLSTMCell(32)
 
             self.norm_enc0 = LayerNormalizationConv2D()
             self.norm_enc6 = LayerNormalizationConv2D()
@@ -479,7 +460,7 @@ class Model(chainer.Chain):
 
             model = None
             if is_cdna:
-                model = StatelessCDNA(num_masks)
+                model = StatelessCDNA(num_masks, process_channel)
             if model is None:
                 raise ValueError("No network specified")
             else:
@@ -539,9 +520,9 @@ class Model(chainer.Chain):
             [self.lstm1, self.hidden1, ops_save("hidden1"), self.lstm2, self.hidden2, ops_save("hidden2"), self.enc1],
             [self.lstm3, self.hidden3, ops_save("hidden3"), self.lstm4, self.hidden4, ops_save("hidden4"), self.enc2],
             [ops_smear(use_state), self.enc3],
-            [self.lstm5, self.hidden5, ops_save("hidden5")],
-            [self.lstm6, self.hidden6, ops_save("hidden6"), ops_skip_connection(1)],
-            [self.lstm7, self.hidden7, ops_save("hidden7"), ops_skip_connection(0), self.norm_enc6]
+            [self.lstm5, self.hidden5, ops_save("hidden5"), self.enc4],
+            [self.lstm6, self.hidden6, ops_save("hidden6"), ops_skip_connection(1), self.enc5],
+            [self.lstm7, self.hidden7, ops_save("hidden7"), ops_skip_connection(0), self.enc6, self.norm_enc6]
         ]
 
     def reset_state(self):
@@ -649,7 +630,7 @@ class Model(chainer.Chain):
             )  # StatelessCDNA
             encs.append(enc7)
 
-            """ Compositing Masks """
+            """ Masks """
             masks = self.masks(enc6)
             masks = F.relu(masks)
             masks = F.reshape(masks, (-1, self.num_masks + 1))
@@ -701,7 +682,7 @@ class Model(chainer.Chain):
 
 
 class ModelTrainer():
-    def __init__(self, learning_rate, gpu, num_iterations, schedsamp_k, use_state, context_frames, num_masks, batch_size):
+    def __init__(self, learning_rate, gpu, num_iterations, schedsamp_k, use_state, context_frames, num_masks, batch_size, process_channel):
         self.gpu = gpu
         self.num_masks = num_masks
         self.use_state = use_state
@@ -710,10 +691,11 @@ class ModelTrainer():
         self.learning_rate = learning_rate
         self.context_frames = context_frames
         self.num_iterations = num_iterations
+        self.process_channel = process_channel
 
     def create_model(self):
         # create the model 
-        self.training_model = Model(num_masks=self.num_masks, is_cdna=True, use_state=self.use_state, scheduled_sampling_k=self.schedsamp_k, num_frame_before_prediction=self.context_frames, prefix='train')
+        self.training_model = Model(num_masks=self.num_masks, is_cdna=True, use_state=self.use_state, scheduled_sampling_k=self.schedsamp_k, num_frame_before_prediction=self.context_frames, prefix='train', process_channel=self.process_channel)
 
     def gpu_support(self):
         # Enable GPU support if defined
@@ -784,7 +766,7 @@ class ModelTrainer():
             if generator_type == 0:
                 img_training_set, act_training_set, sta_training_set = concat_examples(batch)
             elif generator_type == 1:
-                img_training_set, act_training_set, sta_training_set = load_and_concat_examples(batch)
+                img_training_set, act_training_set, sta_training_set = load_and_concat_examples(batch, self.process_channel)
 
             # Perform training
             # logger.info("Global iteration: {}".format(str(itr+1)))
@@ -843,7 +825,7 @@ class ModelTrainer():
                     if generator_type == 0:
                         img_validation_set, act_validation_set, sta_validation_set = concat_examples(batch)
                     elif generator_type == 1:
-                        img_validation_set, act_validation_set, sta_validation_set = load_and_concat_examples(batch)
+                        img_validation_set, act_validation_set, sta_validation_set = load_and_concat_examples(batch, self.process_channel)
 
                     # logger.info("Begining validation for mini-batch of epoch {0}".format(str(epoch+1)))
 
@@ -995,18 +977,19 @@ class DataGenerator():
 @click.option('--gpu', type=click.INT, default=0, help='ID of the gpu(s) to use')
 @click.option('--batch_size', type=click.INT, default=32, help='Batch size for training.')
 @click.option('--num_iterations', type=click.INT, default=int(50*14149), help='Number of training iterations. Number of epoch is: num_iterations/batch_size.')  # 50*5654 1/4 of 1000 dataset sample was 14204
-@click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/Data_sets/CDNA_data/4x4_tactile', help='Directory containing data.')
+@click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/Data_sets/CDNA_data/32x32_tactile', help='Directory containing data.')
 @click.option('--train_val_split', type=click.FLOAT, default=0.95, help='The percentage of data to use for the training set, vs. the validation set.')
 @click.option('--schedsamp_k', type=click.FLOAT, default=900.0, help='The k parameter for schedules sampling. -1 for no scheduled sampling.')
 @click.option('--use_state', type=click.INT, default=1, help='Whether or not to give the state+action to the model.')
-@click.option('--context_frames', type=click.INT, default=2, help='Number of frames before predictions.')
+@click.option('--context_frames', type=click.INT, default=2, help='Number of frames before predictions. (2)')
 @click.option('--num_masks', type=click.INT, default=10, help='Number of masks, usually 1 for DNA, 10 for CDNA, STP.')
 @click.option('--validation_interval', type=click.INT, default=1, help='How often to run a batch through the validation model')
 @click.option('--save_interval', type=click.INT, default=1, help='How often to save a model checkpoint (set to 50 orgionally)')
 @click.option('--output_dir', type=click.Path(), default='/home/user/Robotics/CDNA/models/slip_detection', help='Directory for model checkpoints.')
-@click.option('--current_version', type=click.STRING, default="001", help='Model Version for saving and logging')
+@click.option('--current_version', type=click.STRING, default="002", help='Model Version for saving and logging')
 @click.option('--generator_type', type=click.INT, default=1, help='0 = Load full data first (for small datasets), 1 = Load data on fly as training (for large datasets)')
-def main(learning_rate, gpu, batch_size, num_iterations, data_dir, train_val_split, schedsamp_k, use_state, context_frames, num_masks, validation_interval, save_interval, output_dir,current_version, generator_type):
+@click.option('--process_channel', type=click.INT, default=0, help='if you want to train on a single channel 0 = all channels, 1 = channel 0 etc.')
+def main(learning_rate, gpu, batch_size, num_iterations, data_dir, train_val_split, schedsamp_k, use_state, context_frames, num_masks, validation_interval, save_interval, output_dir,current_version, generator_type, process_channel):
     logger = logging.getLogger(__name__)
     logger.info('Training the model')
     logger.info('Model: {}'.format("CDNA"))
@@ -1014,6 +997,7 @@ def main(learning_rate, gpu, batch_size, num_iterations, data_dir, train_val_spl
     logger.info('# Minibatch-size: {}'.format(batch_size))
     logger.info('# Num iterations: {}'.format(num_iterations))
     logger.info('# epoch: {}'.format(round(num_iterations/batch_size)))
+    # logger.info('# process_channel: {}'.format(process_channel)
 
     model_suffix_dir = "{0}-{1}-{2}".format(time.strftime("%Y%m%d-%H%M%S"), "CDNA", batch_size)
     training_suffix = "{0}".format('training')
@@ -1021,7 +1005,7 @@ def main(learning_rate, gpu, batch_size, num_iterations, data_dir, train_val_spl
     state_suffix = "{0}".format('state')
 
     ### Initialise the model
-    model_trainer = ModelTrainer(learning_rate, gpu, num_iterations, schedsamp_k, use_state, context_frames, num_masks, batch_size)    # Generate model trainer.
+    model_trainer = ModelTrainer(learning_rate, gpu, num_iterations, schedsamp_k, use_state, context_frames, num_masks, batch_size, process_channel)    # Generate model trainer.
     model_trainer.create_model()                        # Create the model.
     model_trainer.create_opimiser()                     # Create the optimizers for the models.
     model_trainer.gpu_support()                         # Enable GPU if required.

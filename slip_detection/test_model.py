@@ -11,10 +11,10 @@ from chainer import cuda
 import chainer.functions as F
 from matplotlib import pyplot as plt
 
-from model import Model
-from model import concat_examples
-# from model_shape_001 import Model
-# from model_shape_001 import concat_examples
+# from model import Model
+# from model import concat_examples
+from model_shape_002 import Model
+from model_shape_002 import concat_examples
 
 
 try:
@@ -51,18 +51,20 @@ def get_test_sample(data_map, data_index, data_dir):
                 change = 0
                 for v1, v2 in zip((image[j]*255).flatten(), (image[j-1]*255).flatten()):
                     change += abs(v1-v2)
-                    if change > 6000:
-                        print("data_index = ", i, j, slip_list)
-                        print(np.sum(image[j-1] * 255))
-                        print(np.sum(image[j] * 255))
-                        print(change)
-                        print(i)
-                        print("==============")
-                        return (i+j)
+                    # if change > 100000:
+                    #     print("data_index = ", i, j, slip_list)
+                    #     print(np.sum(image[j-1] * 255))
+                    #     print(np.sum(image[j] * 255))
+                    #     print(change)
+                    #     print(i)
+                    #     print("==============")
+                    #     return (i)
                 if change > max_change:
                     max_change = change
                     max_change_index = i
-                    print(max_change, max_change_index)
+                    # print(max_change, max_change_index)
+
+    data_index = max_change_index
 
     return data_index
 
@@ -106,22 +108,22 @@ def get_data_info(data_dir, data_index, get_changing_data, process_channel):
 # Main entry point of the training processes (main)
 # =================================================
 @click.command()
-@click.option('--model_dir', type=click.STRING, default='20210129-173745-CDNA-32', help='Directory containing model.')  # channel 0: 20210126-215647-CDNA-32 ||| channel 1: 20210126-184247-CDNA-32
-@click.option('--model_name', type=click.STRING, default='training-10', help='The name of the model.')
+@click.option('--model_dir', type=click.STRING, default='20210202-171526-CDNA-32', help='Directory containing model.')  # channel 0: 20210126-215647-CDNA-32 ||| channel 1: 20210126-184247-CDNA-32
+@click.option('--model_name', type=click.STRING, default='training-3', help='The name of the model.')
 @click.option('--data_index', type=click.INT, default=200, help='Directory containing data.')
 @click.option('--get_changing_data', type=click.INT, default=1, help='Should the program look for a test sample where there is change in the time step.')
 @click.option('--models_dir', type=click.Path(exists=True), default='/home/user/Robotics/CDNA/models/slip_detection', help='Directory containing the models.')
-@click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/Data_sets/CDNA_data/4x4_tactile', help='Directory containing data.')
+@click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/Data_sets/CDNA_data/32x32_tactile', help='Directory containing data.')
 @click.option('--time_step', type=click.INT, default=10, help='Number of time steps to predict.')
 @click.option('--model_type', type=click.STRING, default='CDNA', help='Type of the trained model.')
 @click.option('--schedsamp_k', type=click.FLOAT, default=-1, help='The k parameter for schedules sampling. -1 for no scheduled sampling.')
 @click.option('--context_frames', type=click.INT, default=2, help='Number of frames before predictions.')
 @click.option('--use_state', type=click.INT, default=1, help='Whether or not to give the state+action to the model.')
 @click.option('--num_masks', type=click.INT, default=10, help='Number of masks, usually 1 for DNA, 10 for CDNA, STP.')
-@click.option('--image_height', type=click.INT, default=4, help='Height of one predicted frame.')
-@click.option('--image_width', type=click.INT, default=4, help='Width of one predicted frame.')
-@click.option('--original_image_height', type=click.INT, default=4, help='Height of one predicted frame.')
-@click.option('--original_image_width', type=click.INT, default=4, help='Width of one predicted frame.')
+@click.option('--image_height', type=click.INT, default=32, help='Height of one predicted frame.')
+@click.option('--image_width', type=click.INT, default=32, help='Width of one predicted frame.')
+@click.option('--original_image_height', type=click.INT, default=32, help='Height of one predicted frame.')
+@click.option('--original_image_width', type=click.INT, default=32, help='Width of one predicted frame.')
 @click.option('--downscale_factor', type=click.FLOAT, default=1, help='Downscale the image by this factor. (was 0.5)')
 @click.option('--gpu', type=click.INT, default=0, help='ID of the gpu to use')
 @click.option('--gif', type=click.INT, default=1, help='Create a GIF of the predicted result.')

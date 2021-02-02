@@ -17,10 +17,11 @@ import pandas as pd
 import tensorflow as tf
 
 from matplotlib import pyplot as plt
+from scipy.ndimage.interpolation import map_coordinates
 
 
 class DataFormatter():
-    def __init__(self, data_set_length, data_dir, out_dir, sequence_length, image_original_width, image_original_height, image_original_channel, image_resize_width, image_resize_height, state_action_dimension, create_img, create_img_prediction):
+    def __init__(self, data_set_length, data_dir, out_dir, sequence_length, image_original_width, image_original_height, image_original_channel, image_resize_width, image_resize_height, state_action_dimension, create_img, create_img_prediction, upscale_image):
         self.data_dir = data_dir
         self.out_dir = out_dir
         self.sequence_length = sequence_length
@@ -31,7 +32,13 @@ class DataFormatter():
         self.image_resize_height = image_resize_height
         self.state_action_dimension = state_action_dimension
         self.create_img = create_img
+        self.image_resize_width = image_resize_width
+        self.image_resize_height = image_resize_height
         self.create_img_prediction = create_img_prediction
+        self.upscale_image = upscale_image
+        self.image_original_width = image_original_width
+        self.image_original_height = image_original_height
+
 
         self.logger = logging.getLogger(__name__)
         self.logger.info('making final data set from raw data')
@@ -127,21 +134,40 @@ class DataFormatter():
         return [normal_min, normal_max, sheerx_min, sheerx_max, sheery_min, sheery_max]
 
     def create_image(self, image_raw):
+        # image = np.asarray(image_raw).astype(float)
+        # image = image.reshape(self.image_original_width, self.image_original_height,3)
+        # for x in range(0, len(image[0])):
+        #     for y in range(0, len(image[1])):
+        #         image[x][y][0] = ((image[x][y][0] - self.min_max[0]) / (self.min_max[1] - self.min_max[0])) * 255
+        #         image[x][y][1] = ((image[x][y][1] - self.min_max[2]) / (self.min_max[3] - self.min_max[2])) * 255
+        #         image[x][y][2] = ((image[x][y][2] - self.min_max[4]) / (self.min_max[5] - self.min_max[4])) * 255
+        # image = np.asarray(image.astype(int))
+
+        # if self.upscale_image:
+        #     image = image.reshape(3, self.image_original_width, self.image_original_height)
+        #     new_dims = []
+        #     for og_len, new_len in zip((self.image_original_width, self.image_original_height), (self.image_resize_width, self.image_resize_height)):
+        #         new_dims.append(np.linspace(0, og_len-1, new_len))
+        #     coords = np.meshgrid(*new_dims, indexing='ij')
+        #     normal = map_coordinates(image[0], coords) 
+        #     shearx = map_coordinates(image[1], coords) 
+        #     sheary = map_coordinates(image[2], coords) 
+        #     rescaled_image = np.asarray([normal, shearx, sheary])
+        #     image = rescaled_image.reshape(self.image_resize_width, self.image_resize_height,3).astype(int)
+
+
         image = np.asarray(image_raw).astype(float)
-        image = image.reshape(4,4,3)
+        image = image.reshape(self.image_original_width, self.image_original_height,3)
         for x in range(0, len(image[0])):
             for y in range(0, len(image[1])):
-                # image[x][y][0] = self.normal_scalar * (image[x][y][0] - self.min_max[0])
-                # image[x][y][1] = self.sheerx_scalar * (image[x][y][1] - self.min_max[2])
-                # image[x][y][2] = self.sheery_scalar * (image[x][y][2] - self.min_max[4])
-                # Normalise:
-                image[x][y][0] = ((image[x][y][0] - self.min_max[0]) / (self.min_max[1] - self.min_max[0])) * 255
-                image[x][y][1] = ((image[x][y][1] - self.min_max[2]) / (self.min_max[3] - self.min_max[2])) * 255
-                image[x][y][2] = ((image[x][y][2] - self.min_max[4]) / (self.min_max[5] - self.min_max[4])) * 255
+                image[x][y][0] = ((image[x][y][0] - self.min_max[0]) / (self.min_max[1] - self.min_max[0])) * 255  # Normalise normal
+                image[x][y][1] = ((image[x][y][1] - self.min_max[2]) / (self.min_max[3] - self.min_max[2])) * 255  # Normalise shearx
+                image[x][y][2] = ((image[x][y][2] - self.min_max[4]) / (self.min_max[5] - self.min_max[4])) * 255  # Normalise sheary
 
-        image = np.asarray(image.astype(int))
-        # plt.imshow((image.astype(np.float32) / 255.0))
-        # plt.show()
+        if self.upscale_image:
+            image_pil = Image.fromarray(np.uint8(image)).convert('RGB')
+            image = image_pil.resize((self.image_resize_width, self.image_resize_height), Image.ANTIALIAS)
+
         return (image.astype(np.float32) / 255.0)
 
     def convert_to_state(self, pose):
@@ -222,18 +248,19 @@ class DataFormatter():
 @click.command()
 @click.option('--data_set_length', type=click.INT, default=70, help='size of dataset to format.')
 @click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/slip_detection_franka/Dataset/', help='Directory containing data.')  # /home/user/Robotics/Data_sets/data_set_003/
-@click.option('--out_dir', type=click.Path(), default='/home/user/Robotics/Data_sets/CDNA_data/4x4_tactile', help='Output directory of the converted data.')
+@click.option('--out_dir', type=click.Path(), default='/home/user/Robotics/Data_sets/CDNA_data/32x32_tactile', help='Output directory of the converted data.')
 @click.option('--sequence_length', type=click.INT, default=10, help='Sequence length, including context frames.')
 @click.option('--image_original_width', type=click.INT, default=4, help='Original width of the images.')
 @click.option('--image_original_height', type=click.INT, default=4, help='Original height of the images.')
 @click.option('--image_original_channel', type=click.INT, default=3, help='Original channels amount of the images.')
-@click.option('--image_resize_width', type=click.INT, default=4, help='Resize width of the the images.')
-@click.option('--image_resize_height', type=click.INT, default=4, help='Resize height of the the images.')
+@click.option('--image_resize_width', type=click.INT, default=32, help='Resize width of the the images.')
+@click.option('--image_resize_height', type=click.INT, default=32, help='Resize height of the the images.')
 @click.option('--state_action_dimension', type=click.INT, default=5, help='Dimension of the state and action.')
 @click.option('--create_img', type=click.INT, default=0, help='Create the bitmap image along the numpy RGB values')
 @click.option('--create_img_prediction', type=click.INT, default=1, help='Create the bitmap image used in the prediction phase')
-def main(data_set_length, data_dir, out_dir, sequence_length, image_original_width, image_original_height, image_original_channel, image_resize_width, image_resize_height, state_action_dimension, create_img, create_img_prediction):
-    data_formatter = DataFormatter(data_set_length, data_dir, out_dir, sequence_length, image_original_width, image_original_height, image_original_channel, image_resize_width, image_resize_height, state_action_dimension, create_img, create_img_prediction)
+@click.option('--upscale_image', type=click.INT, default=1, help='Upscale the image to a new dimension?')
+def main(data_set_length, data_dir, out_dir, sequence_length, image_original_width, image_original_height, image_original_channel, image_resize_width, image_resize_height, state_action_dimension, create_img, create_img_prediction, upscale_image):
+    data_formatter = DataFormatter(data_set_length, data_dir, out_dir, sequence_length, image_original_width, image_original_height, image_original_channel, image_resize_width, image_resize_height, state_action_dimension, create_img, create_img_prediction, upscale_image)
 
 if __name__ == '__main__':
     main()
