@@ -75,9 +75,12 @@ class DataFormatter():
 
             for i in range(1, data_set_length):
                 vals = np.asarray(pd.read_csv(tactile_sensor_files[i], header=None))[1:]
-                for val in vals:
-                    min_max_calc.append(val)
+                slip_labels_sample = np.asarray(pd.read_csv(slip_labels_files[i], header=None)[1:])
+                if slip_labels_sample[0][3] == '0.0':
+                    for i in range(50, len(vals)):
+                        min_max_calc.append(vals[i])
             self.min_max = self.find_min_max(min_max_calc)
+
             for i in range(1, data_set_length):
                 images_new_sample = np.asarray(pd.read_csv(tactile_sensor_files[i], header=None))[1:]
                 robot_positions_new_sample = np.asarray(pd.read_csv(robot_pos_files[i], header=None))
@@ -85,7 +88,7 @@ class DataFormatter():
                 images_new_sample = images_new_sample[1:len(robot_positions_files)+1]
                 slip_labels_sample = np.asarray(pd.read_csv(slip_labels_files[i], header=None)[1:])
 
-                for j in range(0, len(robot_positions_files) - sequence_length):  # 1 IGNORES THE HEADER
+                for j in range(50, len(robot_positions_files) - sequence_length):  # 1 IGNORES THE HEADER
                     robot_positions__ = []
                     images = []
                     images_labels = []
@@ -124,11 +127,14 @@ class DataFormatter():
 
 
         for index, (image, slip) in enumerate(zip(images, slips)):
-            image = image.reshape(3, self.image_resize_width, self.image_resize_height)[2]
-            image = image.reshape(self.image_resize_width, self.image_resize_height, 1)
-            cv2.imwrite("/home/user/Robotics/CDNA/images/sheary/image_step" + str(index) + "slip_" + str(slip) + ".png", image)
-            # im = Image.fromarray(np.uint8(image)).convert('RGB')
-            # im.save("/home/user/Robotics/CDNA/images/set1/image_step" + str(index) + "slip_" + str(slip) + ".jpeg")
+            # single channel:
+            # image = image.reshape(3, self.image_resize_width, self.image_resize_height)[2]
+            # image = image.reshape(self.image_resize_width, self.image_resize_height, 1)
+            # cv2.imwrite("/home/user/Robotics/CDNA/images/sheary/image_step" + str(index) + "slip_" + str(slip) + ".png", image)
+
+            # RGB image:
+            im = Image.fromarray(np.uint8(image)).convert('RGB')
+            im.save("/home/user/Robotics/CDNA/images/set1_nostart/image_step" + str(index) + "slip_" + str(slip) + ".jpeg")
 
         print(aaaa)
 
@@ -153,32 +159,6 @@ class DataFormatter():
         return [normal_min, normal_max, sheerx_min, sheerx_max, sheery_min, sheery_max]
 
     def create_image(self, image_raw):
-        # image = np.asarray(image_raw).astype(float)
-        # image = image.reshape(self.image_original_width, self.image_original_height,3)
-        # for x in range(0, len(image[0])):
-        #     for y in range(0, len(image[1])):
-        #         image[x][y][0] = ((image[x][y][0] - self.min_max[0]) / (self.min_max[1] - self.min_max[0])) * 255
-        #         image[x][y][1] = ((image[x][y][1] - self.min_max[2]) / (self.min_max[3] - self.min_max[2])) * 255
-        #         image[x][y][2] = ((image[x][y][2] - self.min_max[4]) / (self.min_max[5] - self.min_max[4])) * 255
-        # image = np.asarray(image.astype(int))
-
-        # if self.upscale_image:
-        #     image = image.reshape(3, self.image_original_width, self.image_original_height)
-        #     new_dims = []
-        #     for og_len, new_len in zip((self.image_original_width, self.image_original_height), (self.image_resize_width, self.image_resize_height)):
-        #         new_dims.append(np.linspace(0, og_len-1, new_len))
-        #     coords = np.meshgrid(*new_dims, indexing='ij')
-        #     normal = map_coordinates(image[0], coords) 
-        #     shearx = map_coordinates(image[1], coords) 
-        #     sheary = map_coordinates(image[2], coords) 
-        #     rescaled_image = np.asarray([normal, shearx, sheary])
-        #     image = rescaled_image.reshape(self.image_resize_width, self.image_resize_height,3).astype(int)
-
-        # print(image_raw)
-        # image = np.asarray(image_raw)
-        # image = image.reshape(self.image_original_width, self.image_original_height,3)
-        # print(image)
-
         image = np.asarray(image_raw).astype(float)
         image = image.reshape(self.image_original_width, self.image_original_height,3)
         for x in range(0, len(image[0])):
@@ -197,76 +177,6 @@ class DataFormatter():
     def convert_to_state(self, pose):
         state = [pose[16], pose[17], pose[18]]
         return state
-
-    def process_data(self):
-        for j in tqdm(range(0, int(len(self.image_names) / 2))):
-        # for j in tqdm(range(0, int(32*20))):
-            raw = []
-            for k in range(len(self.image_names[j])):
-                tmp = self.image_names[j][k].astype(np.float32)
-                raw.append(tmp)
-            raw = np.array(raw)
-
-            ref = []
-            ref.append(j)
-
-            ### save png data
-            if self.create_img == 1:
-                for k in range(raw.shape[0]):
-                    img = Image.fromarray(raw[k], 'RGB')
-                    img.save(self.out_dir + '/image_batch_' + str(j) + '_' + str(k) + '.png')
-                ref.append('image_batch_' + str(j) + '_*' + '.png')
-            else:
-                ref.append('')
-
-            ### save np images
-            np.save(self.out_dir + '/image_batch_' + str(j), raw)
-
-            ### save np action
-            np.save(self.out_dir + '/action_batch_' + str(j), self.robot_positions[j])
-
-            ### save np states
-            np.save(self.out_dir + '/state_batch_' + str(j), self.robot_positions[j])  # original
-
-            ### save np images
-            np.save(self.out_dir + '/slip_label_batch_' + str(j), self.slip_labels[j])
-
-            # save names for map file
-            ref.append('image_batch_' + str(j) + '.npy')
-            ref.append('action_batch_' + str(j) + '.npy')
-            ref.append('state_batch_' + str(j) + '.npy')
-
-            # Image used in prediction
-            if self.create_img_prediction == 1:
-                pred = []
-                for k in range(len(self.image_names[j])):
-                    img = Image.fromarray(self.image_names[j][k], 'RGB')  # [1]
-                    img.save(self.out_dir + '/image_batch_pred_' + str(j) + '_' + str(k) + '.png')
-                    pred.append(np.array(img))
-                np.save(self.out_dir + '/image_batch_pred_' + str(j), np.array(pred))
-                ref.append('image_batch_pred_' + str(j) + '_*' + '.png')
-                ref.append('image_batch_pred_' + str(j) + '.npy')
-            else:
-                ref.append('')
-                ref.append('')
-
-            ref.append('slip_label_batch_' + str(j) + '.npy')
-
-            ### Append all file names for this sample to CSV file for training.
-            self.csv_ref.append(ref)
-
-    def getFrame(self, sec, vidcap):
-        vidcap.set(cv2.CAP_PROP_POS_MSEC,sec*1000)
-        hasFrames,image = vidcap.read()
-        return image
-
-    def save_data_to_map(self):
-        self.logger.info("Writing the results into map file '{0}'".format('map.csv'))
-        with open(self.out_dir + '/map.csv', 'w') as csvfile:
-            writer = csv.writer(csvfile, quoting=csv.QUOTE_ALL)
-            writer.writerow(['id', 'img_bitmap_path', 'img_np_path', 'action_np_path', 'state_np_path', 'img_bitmap_pred_path', 'img_np_pred_path', 'slip_label'])
-            for row in self.csv_ref:
-                writer.writerow(row)
 
 
 @click.command()

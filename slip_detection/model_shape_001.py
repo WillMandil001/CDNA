@@ -972,7 +972,7 @@ class DataGenerator():
 @click.option('--num_masks', type=click.INT, default=10, help='Number of masks, usually 1 for DNA, 10 for CDNA, STP.')
 @click.option('--validation_interval', type=click.INT, default=1, help='How often to run a batch through the validation model')
 @click.option('--save_interval', type=click.INT, default=1, help='How often to save a model checkpoint (set to 50 orgionally)')
-@click.option('--output_dir', type=click.Path(), default='/home/user/Robotics/CDNA/models/slip_detection', help='Directory for model checkpoints.')
+@click.option('--output_dir', type=click.Path(), default='models', help='Directory for model checkpoints.')
 @click.option('--current_version', type=click.STRING, default="002", help='Model Version for saving and logging')
 @click.option('--generator_type', type=click.INT, default=1, help='0 = Load full data first (for small datasets), 1 = Load data on fly as training (for large datasets)')
 @click.option('--process_channel', type=click.INT, default=1, help='if you want to train on a single channel')

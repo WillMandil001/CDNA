@@ -51,18 +51,18 @@ def get_test_sample(data_map, data_index, data_dir):
                 change = 0
                 for v1, v2 in zip((image[j]*255).flatten(), (image[j-1]*255).flatten()):
                     change += abs(v1-v2)
-                    # if change > 100000:
-                    #     print("data_index = ", i, j, slip_list)
-                    #     print(np.sum(image[j-1] * 255))
-                    #     print(np.sum(image[j] * 255))
-                    #     print(change)
-                    #     print(i)
-                    #     print("==============")
-                    #     return (i)
-                if change > max_change:
-                    max_change = change
-                    max_change_index = i
-                    # print(max_change, max_change_index)
+                    if change > 7000:
+                        print("data_index = ", i, j, slip_list)
+                        print(np.sum(image[j-1] * 255))
+                        print(np.sum(image[j] * 255))
+                        print(change)
+                        print(i)
+                        print("==============")
+                        return (i)
+                # if change > max_change:
+                #     max_change = change
+                #     max_change_index = i
+                #     print(max_change, max_change_index, slip_list)
 
     data_index = max_change_index
 
@@ -83,7 +83,6 @@ def get_data_info(data_dir, data_index, get_changing_data, process_channel):
     if get_changing_data == 1:
         data_index = get_test_sample(data_map, data_index, data_dir)
 
-    data_index = int(data_index)+1
     if data_index > len(data_map)-1:
         raise ValueError("Data index {} is out of range for available data".format(data_index))
 
@@ -108,8 +107,8 @@ def get_data_info(data_dir, data_index, get_changing_data, process_channel):
 # Main entry point of the training processes (main)
 # =================================================
 @click.command()
-@click.option('--model_dir', type=click.STRING, default='20210202-171526-CDNA-32', help='Directory containing model.')  # channel 0: 20210126-215647-CDNA-32 ||| channel 1: 20210126-184247-CDNA-32
-@click.option('--model_name', type=click.STRING, default='training-3', help='The name of the model.')
+@click.option('--model_dir', type=click.STRING, default='20210203-164225-CDNA-32', help='Directory containing model.')  # channel 0: 20210126-215647-CDNA-32 ||| channel 1: 20210126-184247-CDNA-32
+@click.option('--model_name', type=click.STRING, default='training-5', help='The name of the model.')
 @click.option('--data_index', type=click.INT, default=200, help='Directory containing data.')
 @click.option('--get_changing_data', type=click.INT, default=1, help='Should the program look for a test sample where there is change in the time step.')
 @click.option('--models_dir', type=click.Path(exists=True), default='/home/user/Robotics/CDNA/models/slip_detection', help='Directory containing the models.')
@@ -119,7 +118,7 @@ def get_data_info(data_dir, data_index, get_changing_data, process_channel):
 @click.option('--schedsamp_k', type=click.FLOAT, default=-1, help='The k parameter for schedules sampling. -1 for no scheduled sampling.')
 @click.option('--context_frames', type=click.INT, default=2, help='Number of frames before predictions.')
 @click.option('--use_state', type=click.INT, default=1, help='Whether or not to give the state+action to the model.')
-@click.option('--num_masks', type=click.INT, default=10, help='Number of masks, usually 1 for DNA, 10 for CDNA, STP.')
+@click.option('--num_masks', type=click.INT, default=20, help='Number of masks, usually 1 for DNA, 10 for CDNA, STP.')
 @click.option('--image_height', type=click.INT, default=32, help='Height of one predicted frame.')
 @click.option('--image_width', type=click.INT, default=32, help='Width of one predicted frame.')
 @click.option('--original_image_height', type=click.INT, default=32, help='Height of one predicted frame.')
@@ -182,7 +181,11 @@ def main(model_dir, model_name, data_index, get_changing_data, models_dir, data_
     f, axarr = plt.subplots(2,len(image))
     axarr[0,0].set_ylabel("Pred", rotation=90, size='large')
     axarr[1,0].set_ylabel("GT", rotation=90, size='large')
-    for i in range(0, len(image)-1):
+    
+    print(len(image))
+    print(len(predicted_images))
+
+    for i in range(0, len(image)):
         if process_channel:
             colour = 'gray'
             if i == 0:
@@ -200,8 +203,8 @@ def main(model_dir, model_name, data_index, get_changing_data, models_dir, data_
                 axarr[0,i].imshow(np.ones((4,4,3)))
                 axarr[0,i].set_title("{0}".format(i), fontsize=8)
             else:
-                axarr[0,i].imshow((cupy.asnumpy(predicted_images[i].data[0] * 255).astype(np.uint8).T).transpose(1, 0, 2)) 
-                axarr[0,i].set_title("{0}: P: {1}".format(i, int(np.sum(cupy.asnumpy(predicted_images[i].data[0] * 255).astype(np.uint8).T))), fontsize=8)
+                axarr[0,i].imshow((cupy.asnumpy(predicted_images[i - 1].data[0] * 255).astype(np.uint8).T).transpose(1, 0, 2)) 
+                axarr[0,i].set_title("{0}: P: {1}".format(i, int(np.sum(cupy.asnumpy(predicted_images[i - 1].data[0] * 255).astype(np.uint8).T))), fontsize=8)
 
             axarr[1,i].imshow(image[i].astype(np.uint8))
             axarr[1,i].set_title("{0}: GT: {1} S:{2}".format(i, int(np.sum(image[i].astype(np.uint8))), slip_list[i]), fontsize=7)

@@ -46,7 +46,7 @@ import matplotlib.pyplot as plt
 RELU_SHIFT = 1e-12
 
 # Kernel size for DNA and CDNA
-DNA_KERN_SIZE = 5 ##  was 5
+DNA_KERN_SIZE = 3 ##  was 5
 
 # =============================================
 # Helpers functions used accross scripts (hlpe)
@@ -441,8 +441,8 @@ class Model(chainer.Chain):
             self.lstm3 = BasicConvLSTMCell(32)  # 16 shape
             self.lstm4 = BasicConvLSTMCell(32)  # 16 shape
             self.lstm5 = BasicConvLSTMCell(128) # 8 shape
-            self.lstm6 = BasicConvLSTMCell(64)
-            self.lstm7 = BasicConvLSTMCell(32)
+            self.lstm6 = BasicConvLSTMCell(96)
+            self.lstm7 = BasicConvLSTMCell(64)
 
             self.norm_enc0 = LayerNormalizationConv2D()
             self.norm_enc6 = LayerNormalizationConv2D()
@@ -900,7 +900,7 @@ class ModelTrainer():
 
 
 class DataGenerator():
-    def __init__(self, batch_size, logger, data_dir, train_val_split, generator_type):
+    def __init__(self, batch_size, logger, data_dir, train_val_split, train_test_split, generator_type, training_suffix, output_dir, model_suffix_dir, current_version):
         data_map = []
         with open(data_dir + '/map.csv', 'rb') as f:  # rb
             reader = csv.reader(f)
@@ -939,6 +939,35 @@ class DataGenerator():
         self.images_validation = np.asarray(images[train_val_split_index:])
         self.actions_validation = np.asarray(actions[train_val_split_index:])
         self.states_validation = np.asarray(states[train_val_split_index:])
+
+        if train_test_split:
+            train_test_split_index = int(np.floor(train_test_split * len(self.images_training)))
+            self.images_training = np.asarray(self.images_training[:train_test_split_index])
+            self.actions_training = np.asarray(self.actions_training[:train_test_split_index])
+            self.states_training = np.asarray(self.states_training[:train_test_split_index])
+
+            self.images_test = np.asarray(self.images_training[train_test_split_index:])
+            self.actions_test = np.asarray(self.actions_training[train_test_split_index:])
+            self.states_test = np.asarray(self.states_training[train_test_split_index:])
+
+            ## save the test data to the models save location for later analysis with unseen data.
+            save_dir = output_dir + '/' + model_suffix_dir
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+                # Save the version of the code
+                f = open(save_dir + '/version', 'w')
+                f.write(current_version + '\n')
+                f.close()
+
+            self.grouped_set_test = []
+            for idx in xrange(len(self.images_test)):
+                group = []
+                group.append(self.images_test[idx])
+                group.append(self.actions_test[idx])
+                group.append(self.states_test[idx])
+                self.grouped_set_test.append(group)
+
+            np.save(save_dir + '/' + 'testset', np.asarray(self.grouped_set_test))
 
         logger.info('Data set contain {0}, {1} will be use for training and {2} will be use for validation'.format(len(images)-1, train_val_split_index, len(images)-1-train_val_split_index))
 
@@ -979,17 +1008,18 @@ class DataGenerator():
 @click.option('--num_iterations', type=click.INT, default=int(50*14149), help='Number of training iterations. Number of epoch is: num_iterations/batch_size.')  # 50*5654 1/4 of 1000 dataset sample was 14204
 @click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/Data_sets/CDNA_data/32x32_tactile', help='Directory containing data.')
 @click.option('--train_val_split', type=click.FLOAT, default=0.95, help='The percentage of data to use for the training set, vs. the validation set.')
+@click.option('--train_test_split', type=click.FLOAT, default=0.95, help='The percentage of data to use for the training set, vs. the test set. Set as 0 for no test set.')
 @click.option('--schedsamp_k', type=click.FLOAT, default=900.0, help='The k parameter for schedules sampling. -1 for no scheduled sampling.')
 @click.option('--use_state', type=click.INT, default=1, help='Whether or not to give the state+action to the model.')
 @click.option('--context_frames', type=click.INT, default=2, help='Number of frames before predictions. (2)')
-@click.option('--num_masks', type=click.INT, default=10, help='Number of masks, usually 1 for DNA, 10 for CDNA, STP.')
+@click.option('--num_masks', type=click.INT, default=20, help='Number of masks, usually 1 for DNA, 10 for CDNA, STP.')
 @click.option('--validation_interval', type=click.INT, default=1, help='How often to run a batch through the validation model')
 @click.option('--save_interval', type=click.INT, default=1, help='How often to save a model checkpoint (set to 50 orgionally)')
 @click.option('--output_dir', type=click.Path(), default='/home/user/Robotics/CDNA/models/slip_detection', help='Directory for model checkpoints.')
 @click.option('--current_version', type=click.STRING, default="002", help='Model Version for saving and logging')
 @click.option('--generator_type', type=click.INT, default=1, help='0 = Load full data first (for small datasets), 1 = Load data on fly as training (for large datasets)')
 @click.option('--process_channel', type=click.INT, default=0, help='if you want to train on a single channel 0 = all channels, 1 = channel 0 etc.')
-def main(learning_rate, gpu, batch_size, num_iterations, data_dir, train_val_split, schedsamp_k, use_state, context_frames, num_masks, validation_interval, save_interval, output_dir,current_version, generator_type, process_channel):
+def main(learning_rate, gpu, batch_size, num_iterations, data_dir, train_val_split, train_test_split, schedsamp_k, use_state, context_frames, num_masks, validation_interval, save_interval, output_dir,current_version, generator_type, process_channel):
     logger = logging.getLogger(__name__)
     logger.info('Training the model')
     logger.info('Model: {}'.format("CDNA"))
@@ -1012,7 +1042,7 @@ def main(learning_rate, gpu, batch_size, num_iterations, data_dir, train_val_spl
 
     ### Generate the training data
     logger.info("Fetching the models and inputs")
-    data_generator = DataGenerator(batch_size, logger, data_dir, train_val_split, generator_type) 
+    data_generator = DataGenerator(batch_size, logger, data_dir, train_val_split, train_test_split, generator_type, training_suffix, output_dir, model_suffix_dir, current_version)
     train_iter, valid_iter = data_generator.train_iter(batch_size)
     data = data_generator.return_Data()
     ### Train model:

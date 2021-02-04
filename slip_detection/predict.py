@@ -77,7 +77,7 @@ def get_data_info(data_dir, data_index, get_changing_data, process_channel):
         raise ValueError("No file map found")
 
     data_map = data_map[1:]
-    random.shuffle(data_map)
+    # random.shuffle(data_map)
     if get_changing_data == 1:
         data_index = get_test_sample(data_map, data_index, data_dir)
 
