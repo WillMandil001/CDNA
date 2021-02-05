@@ -54,15 +54,20 @@ class DataFormatter():
                 if file[0:55] == "/home/user/Robotics/slip_detection_franka/Dataset/robot":
                     robot_pos_files.append(file)
 
-            tactile_sensor_files = []
-            for file in sorted(files):
-                if file[0:55] == "/home/user/Robotics/slip_detection_franka/Dataset/xelaS":
-                    tactile_sensor_files.append(file)
+            # tactile_sensor_files = []
+            # for file in sorted(files):
+            #     if file[0:66] == "/home/user/Robotics/slip_detection_franka/Dataset/xelaSensor2_test":
+            #         tactile_sensor_files.append(file)
 
             slip_labels_files = []
             for file in sorted(files):
                 if file[0:55] == "/home/user/Robotics/slip_detection_franka/Dataset/label":
                     slip_labels_files.append(file)
+            
+            tactile_sensor_files = []
+            for file in sorted(files):
+                if file[0:68] == "/home/user/Robotics/slip_detection_franka/Dataset/xelaSensor2_manual":
+                    tactile_sensor_files.append(file)
 
             robot_positions = []
             image_names = []
@@ -73,7 +78,7 @@ class DataFormatter():
 
             min_max_calc = []
 
-            for i in range(1, data_set_length):
+            for i in range(1, 2):
                 vals = np.asarray(pd.read_csv(tactile_sensor_files[i], header=None))[1:]
                 slip_labels_sample = np.asarray(pd.read_csv(slip_labels_files[i], header=None)[1:])
                 if slip_labels_sample[0][3] == '0.0':
@@ -88,7 +93,7 @@ class DataFormatter():
                 images_new_sample = images_new_sample[1:len(robot_positions_files)+1]
                 slip_labels_sample = np.asarray(pd.read_csv(slip_labels_files[i], header=None)[1:])
 
-                for j in range(50, len(robot_positions_files) - sequence_length):  # 1 IGNORES THE HEADER
+                for j in range(10, len(robot_positions_files) - sequence_length):  # 1 IGNORES THE HEADER
                     robot_positions__ = []
                     images = []
                     images_labels = []
@@ -125,16 +130,15 @@ class DataFormatter():
             images.append(self.create_image(image_name)*255)
             slips.append(slip_label[2])
 
-
         for index, (image, slip) in enumerate(zip(images, slips)):
             # single channel:
-            # image = image.reshape(3, self.image_resize_width, self.image_resize_height)[2]
-            # image = image.reshape(self.image_resize_width, self.image_resize_height, 1)
-            # cv2.imwrite("/home/user/Robotics/CDNA/images/sheary/image_step" + str(index) + "slip_" + str(slip) + ".png", image)
+            image = image.reshape(3, self.image_resize_width, self.image_resize_height)[0]
+            image = image.reshape(self.image_resize_width, self.image_resize_height, 1)
+            cv2.imwrite("/home/user/Robotics/CDNA/images/manual_slip_normal/image_step" + str(index) + "slip_" + str(slip) + ".png", image)
 
             # RGB image:
-            im = Image.fromarray(np.uint8(image)).convert('RGB')
-            im.save("/home/user/Robotics/CDNA/images/set1_nostart/image_step" + str(index) + "slip_" + str(slip) + ".jpeg")
+            # im = Image.fromarray(np.uint8(image)).convert('RGB')
+            # im.save("/home/user/Robotics/CDNA/images/manual_slip/image_step" + str(index) + "slip_" + str(slip) + ".jpeg")
 
         print(aaaa)
 
@@ -169,7 +173,7 @@ class DataFormatter():
 
         if self.upscale_image:
             image_pil = Image.fromarray(np.uint8(image)).convert('RGB')
-            image = image_pil.resize((self.image_resize_width, self.image_resize_height), Image.ANTIALIAS)
+            image = image_pil.resize((self.image_resize_width, self.image_resize_height)) # , Image.ANTIALIAS)
             image = np.asarray(image)
 
         return (image.astype(np.float32) / 255.0)
