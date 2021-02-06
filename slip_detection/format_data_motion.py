@@ -77,13 +77,15 @@ class DataFormatter():
             min_max_calc = []
 
             index = 0
-            for i in tqdm(range(1, data_set_length)):
+            for i in range(1, data_set_length):
+                print(i)
                 images_new_sample = np.asarray(pd.read_csv(tactile_sensor_files[i], header=None))[1:]
                 robot_positions_new_sample = np.asarray(pd.read_csv(robot_pos_files[i], header=None))
                 robot_positions_files = np.asarray([robot_positions_new_sample[j*frequency_rate] for j in range(1, min(len(images_new_sample), int(len(robot_positions_new_sample)/frequency_rate)))])
                 images_new_sample = images_new_sample[1:len(robot_positions_files)+1]
                 slip_labels_sample = np.asarray(pd.read_csv(slip_labels_files[i], header=None)[1:])
-                for j in range(0, len(robot_positions_files) - sequence_length):  # 1 IGNORES THE HEADER
+
+                for j in tqdm(range(0, len(robot_positions_files) - sequence_length)):  # 1 IGNORES THE HEADER
                     robot_positions__ = []
                     images = []
                     images_labels = []
@@ -94,11 +96,7 @@ class DataFormatter():
                         images_labels.append(images_new_sample[j+t+1])  # [video location, frame]
                         slip_labels_sample__.append(slip_labels_sample[j+t][2])
 
-                    robot_positions.append([state for state in robot_positions__])  # this works for testing their system
-                    image_names.append(images)
-                    image_names_labels.append(images_labels)
-                    slip_labels.append(slip_labels_sample__)
-                    self.process_data_sample(index, np.asarray(robot_positions), np.asarray(image_names), np.asarray(slip_labels))
+                    self.process_data_sample(index, np.asarray([state for state in robot_positions__]), np.asarray(images), np.asarray(slip_labels_sample__))
                     index += 1
 
             self.save_data_to_map()
@@ -136,8 +134,9 @@ class DataFormatter():
             # color = (255-int(z/100 * 255), 210, 255-int(z/100 * 255))  # Draw sensor circles
             cv2.circle(img, (x, y), int(z), color=color, thickness=-1)  # Draw sensor circles
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            im_bw = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)[1].astype(np.bool)
 
-        return gray
+        return im_bw
 
     def tester(self):
         tactile_sensor_files1 = "/home/user/Robotics/slip_detection_franka/Dataset/xela_validation/xelaSensor1_left2right.csv"  #  xelaSensor1_bottomup   xelaSensor1_left2right.csv"
@@ -189,8 +188,9 @@ class DataFormatter():
             y = image_position[1] + int(-yy) # int(yy)
             # color = (255-int(z/100 * 255), 210, 255-int(z/100 * 255))  # Draw sensor circles
             cv2.circle(img, (x, y), int(z), color=color, thickness=-1)  # Draw sensor circles
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.uint8)
+            # im_bw = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)[1].astype(np.uint8)
+
         cv2.imshow("xela-sensor", gray)   # Display sensor image
         key = cv2.waitKey(40)
         if key == 27:
@@ -210,14 +210,7 @@ class DataFormatter():
         ref = []
         ref.append(index)
 
-        ### save png data
-        if self.create_img == 1:
-            for k in range(raw.shape[0]):
-                img = Image.fromarray(raw[k], 'RGB')
-                img.save(self.out_dir + '/image_batch_' + str(index) + '_' + str(k) + '.png')
-            ref.append('image_batch_' + str(index) + '_*' + '.png')
-        else:
-            ref.append('')
+        ref.append('')
 
         ### save np images
         np.save(self.out_dir + '/image_batch_' + str(index), raw)
