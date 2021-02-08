@@ -325,7 +325,7 @@ class StatelessCDNA(chainer.Chain):
         super(StatelessCDNA, self).__init__()
 
         with self.init_scope():
-            self.enc7 = L.Deconvolution2D(in_channels=16, out_channels=1, ksize=(1,1), stride=1)  # 64
+            self.enc7 = L.Deconvolution2D(in_channels=32, out_channels=1, ksize=(1,1), stride=1)  # 64
             self.cdna_kerns = L.Linear(in_size=None, out_size=DNA_KERN_SIZE * DNA_KERN_SIZE * num_masks)
 
         self.num_masks = num_masks
@@ -415,17 +415,17 @@ class Model(chainer.Chain):
             self.enc2 = L.Convolution2D(in_channels=None, out_channels=64, ksize=(3, 3), stride=2, pad=1)
             self.enc3 = L.Convolution2D(in_channels=None, out_channels=70, ksize=(3, 3), stride=1, pad=1)
 
-            self.enc4 = L.Deconvolution2D(128, (3, 3), stride=2, outsize=(40, 40), pad=1)
-            self.enc5 = L.Deconvolution2D(64, (3, 3), stride=2, outsize=(80, 80), pad=1)
-            self.enc6 = L.Deconvolution2D(16, (3, 3), stride=1, outsize=(80, 80), pad=1)
+            self.enc4 = L.Deconvolution2D(70, (3, 3), stride=2, outsize=(40, 40), pad=1)
+            self.enc5 = L.Deconvolution2D(32, (3, 3), stride=2, outsize=(80, 80), pad=1)
+            self.enc6 = L.Deconvolution2D(32, (3, 3), stride=1, outsize=(80, 80), pad=1)
 
-            self.lstm1 = BasicConvLSTMCell(16)  # 32 shape
-            self.lstm2 = BasicConvLSTMCell(16)  # 32 shape
-            self.lstm3 = BasicConvLSTMCell(32)  # 16 shape
-            self.lstm4 = BasicConvLSTMCell(32)  # 16 shape
-            self.lstm5 = BasicConvLSTMCell(128) # 8 shape
-            self.lstm6 = BasicConvLSTMCell(96)
-            self.lstm7 = BasicConvLSTMCell(64)
+            self.lstm1 = BasicConvLSTMCell(16)
+            self.lstm2 = BasicConvLSTMCell(16)
+            self.lstm3 = BasicConvLSTMCell(32)
+            self.lstm4 = BasicConvLSTMCell(32)
+            self.lstm5 = BasicConvLSTMCell(70)
+            self.lstm6 = BasicConvLSTMCell(32)
+            self.lstm7 = BasicConvLSTMCell(32)
 
             self.norm_enc0 = LayerNormalizationConv2D()
             self.norm_enc6 = LayerNormalizationConv2D()
@@ -800,9 +800,6 @@ class ModelTrainer():
                 local_losses, local_psnr_all = [], []
                 start_time, stop_time = None, None
 
-            # if train_iter.is_new_epoch:  # and epoch+1 % validation_interval == 0:
-            #     print("HERERERERERERERERERERER")
-
                 start_time = time.time()
                 for batch in valid_iter:
                     if generator_type == 0:
@@ -987,7 +984,7 @@ class DataGenerator():
 @click.command()
 @click.option('--learning_rate', type=click.FLOAT, default=0.001, help='The base learning rate of the generator. was 0.001')
 @click.option('--gpu', type=click.INT, default=0, help='ID of the gpu(s) to use')
-@click.option('--batch_size', type=click.INT, default=16, help='Batch size for training.')
+@click.option('--batch_size', type=click.INT, default=2, help='Batch size for training.')
 @click.option('--num_iterations', type=click.INT, default=int(50*14149), help='Number of training iterations. Number of epoch is: num_iterations/batch_size.')  # 50*5654 1/4 of 1000 dataset sample was 14204
 @click.option('--data_dir', type=click.Path(exists=True), default='/home/user/Robotics/Data_sets/CDNA_data/motion_160_xyonly', help='Directory containing data.')
 @click.option('--train_val_split', type=click.FLOAT, default=0.95, help='The percentage of data to use for the training set, vs. the validation set.')

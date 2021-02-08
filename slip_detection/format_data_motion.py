@@ -32,8 +32,6 @@ class DataFormatter():
         self.image_resize_height = image_resize_height
         self.state_action_dimension = state_action_dimension
         self.create_img = create_img
-        self.image_resize_width = image_resize_width
-        self.image_resize_height = image_resize_height
         self.create_img_prediction = create_img_prediction
         self.upscale_image = upscale_image
         self.image_original_width = image_original_width
@@ -94,19 +92,20 @@ class DataFormatter():
                         robot_positions__.append(self.convert_to_state(robot_positions_files[j+t]))  # Convert from HTM to euler task space and quaternion orientation. [[was just [t]]]]
                         images.append(self.create_movement_image(images_new_sample[j+t], images_new_sample[0], color=(255,255,255)))  # [video location, frame]
                         images_labels.append(images_new_sample[j+t+1])  # [video location, frame]
-                        slip_labels_sample__.append(slip_labels_sample[j+t][2])
-
-                    self.process_data_sample(index, np.asarray([state for state in robot_positions__]), np.asarray(images), np.asarray(slip_labels_sample__))
+                        slip_labels_sample__.append(slip_labels_sample[j+t][2])    
+                    # self.process_data_sample(index, np.asarray([state for state in robot_positions__]), np.asarray(images), np.asarray(slip_labels_sample__))
                     index += 1
 
-            self.save_data_to_map()
-
+                if slip_labels_sample[0][3] != '0.0':
+                    self.view_iamge_sequence(images_new_sample, slip_labels_sample)
+        #     self.save_data_to_map()
 
     def create_movement_image(self, data, base, color):
-        width  =  80   # 160 # width of the image
-        height =  80   # 160 # height of the image
+        width  =  self.image_resize_width   # 160 # width of the image
+        height =  self.image_resize_height  # 160 # height of the image
         margin =  15   # 30  # margin of the taxel in the image
-        scale  =  150  # 65
+        scale  =  50   # 150 65
+        normal_scale  =  500   # 150 65
         radius =  1    # 3
 
         img = np.zeros((height,width,3), np.uint8)
@@ -120,23 +119,23 @@ class DataFormatter():
         diff = diff.T.reshape(3,4,4)
         dx = np.rot90((np.flip(diff[0], axis=0) / scale), k=3, axes=(0,1)).flatten()
         dy = np.rot90((np.flip(diff[1], axis=0) / scale), k=3, axes=(0,1)).flatten()
-        dz = np.rot90((np.flip(diff[2], axis=0) / scale), k=3, axes=(0,1)).flatten()
+        dz = np.rot90((np.flip(diff[2], axis=0) / normal_scale), k=3, axes=(0,1)).flatten()
 
         image_positions = []
         for x in range(margin, 5*margin, margin):
             for y in range(margin, 5*margin, margin):
                 image_positions.append([y,x])
 
-        for xx, yy ,zz, image_position in zip(dx, dy, dz, image_positions):
-            z = radius # + (abs(xx))
+        for xx, yy, zz, image_position in zip(dx, dy, dz, image_positions):
+            z = radius #+ (abs(zz))
             x = image_position[0] + int(-xx) # int(zz)
             y = image_position[1] + int(-yy) # int(yy)
             # color = (255-int(z/100 * 255), 210, 255-int(z/100 * 255))  # Draw sensor circles
             cv2.circle(img, (x, y), int(z), color=color, thickness=-1)  # Draw sensor circles
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            im_bw = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)[1].astype(np.bool)
+            # im_bw = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)[1].astype(np.bool)
 
-        return im_bw
+        return gray #im_bw
 
     def tester(self):
         tactile_sensor_files1 = "/home/user/Robotics/slip_detection_franka/Dataset/xela_validation/xelaSensor1_left2right.csv"  #  xelaSensor1_bottomup   xelaSensor1_left2right.csv"
@@ -159,6 +158,25 @@ class DataFormatter():
                     base  = image.astype(np.float32)
                     image = images_new_sample1[0].astype(np.float32)
                     self.visualise_time_sequence(image, base, color)
+
+    def view_iamge_sequence(self, image_list, slip_labels_sample):
+        slips = []
+        images = []
+        for image_name, slip_label in zip(image_list, slip_labels_sample):
+            images.append(self.create_movement_image(image_name, image_list[0], color=(255,255,255)))
+            slips.append(slip_label[2])
+
+        for index, (image, slip) in enumerate(zip(images, slips)):
+            # single channel:
+            # image = image.reshape(1, self.image_resize_width, self.image_resize_height)[0]
+            # image = image.reshape(self.image_resize_width, self.image_resize_height, 1)
+            cv2.imwrite("/home/user/Robotics/CDNA/images/manual_slip_motionxy/image_step" + str(index) + "slip_" + str(slip) + ".png", image)
+
+            # RGB image:
+            # im = Image.fromarray(np.uint8(image)).convert('RGB')
+            # im.save("/home/user/Robotics/CDNA/images/manual_slip/image_step" + str(index) + "slip_" + str(slip) + ".jpeg")
+
+        print(aaaa)
 
     def visualise_time_sequence(self, data, base, color):
         width  = 80 # 160  # 800 # width of the image
@@ -257,8 +275,8 @@ class DataFormatter():
 @click.option('--image_original_width', type=click.INT, default=4, help='Original width of the images.')
 @click.option('--image_original_height', type=click.INT, default=4, help='Original height of the images.')
 @click.option('--image_original_channel', type=click.INT, default=3, help='Original channels amount of the images.')
-@click.option('--image_resize_width', type=click.INT, default=32, help='Resize width of the the images.')
-@click.option('--image_resize_height', type=click.INT, default=32, help='Resize height of the the images.')
+@click.option('--image_resize_width', type=click.INT, default=80, help='Resize width of the the images.')
+@click.option('--image_resize_height', type=click.INT, default=80, help='Resize height of the the images.')
 @click.option('--state_action_dimension', type=click.INT, default=5, help='Dimension of the state and action.')
 @click.option('--create_img', type=click.INT, default=0, help='Create the bitmap image along the numpy RGB values')
 @click.option('--create_img_prediction', type=click.INT, default=0, help='Create the bitmap image used in the prediction phase')

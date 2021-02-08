@@ -703,7 +703,7 @@ class ModelTrainer():
             chainer.cuda.get_device_from_id(self.gpu).use()
             self.training_model.to_gpu()
             self.xp = cupy
-            self.xp.cuda.alloc_pinned_memory(5*1024**3)  # 8gb
+            self.xp.cuda.alloc_pinned_memory(4*1024**3)  # 8gb
             print(self.xp.get_default_memory_pool().total_bytes())
         else:
             self.xp = np
